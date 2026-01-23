@@ -49,19 +49,11 @@ async def click_map():
 async def swip_map():
     pyautogui.dragTo(coo(0.9, 0.5))
     pyautogui.dragRel(-300, 0, 0.2)
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.3)
 
 async def click_recolt():
     pyautogui.click(coo(0.5, 0.85))
     await asyncio.sleep(3)
-
-async def click(co):
-    pyautogui.click(coo(*co))
-
-async def tp_world(name):
-    await click_map()
-    pyautogui.click(coo(*point["tp"][name]))
-    await asyncio.sleep(5)
 
 async def tp_spawn(name):
     await click_map()
@@ -72,12 +64,7 @@ async def recolt(name):
     await tp_spawn(point["recolt"][name]["tp"])
     await asyncio.sleep(0.3)
     for x, y in point["recolt"][name]["move"]:
-        if x in ["up", "left", "down", "right"]:
-            await press(x, y)
-        elif x == "sleep":
-            await asyncio.sleep(y)
-        elif x == "click":
-            await click(y)
+        await press(x, y)
     await click_recolt()
 
 class GitHubUpdater:
@@ -160,14 +147,6 @@ class GitHubUpdater:
         try:
             print(f"📂 Installation de la mise à jour...")
 
-            # Créer un backup
-            backup_dir = "backup_old_version"
-            if os.path.exists(install_dir):
-                print(f"💾 Création d'un backup dans '{backup_dir}'...")
-                if os.path.exists(backup_dir):
-                    shutil.rmtree(backup_dir)
-                shutil.copytree(install_dir, backup_dir, dirs_exist_ok=True)
-
             # Extraire le zip
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall("temp_update")
@@ -196,7 +175,6 @@ class GitHubUpdater:
             os.remove(zip_path)
 
             print("✅ Installation terminée!")
-            print(f"📌 Un backup a été créé dans '{backup_dir}'")
             return True
 
         except Exception as e:
@@ -219,19 +197,31 @@ class GitHubUpdater:
         print(f"\n📝 Notes de version:")
         print(update_info.get('notes', 'N/A'))
 
-        # Télécharger
-        zip_file = self.download_update(update_info['download_url'])
+        # Demander confirmation
+        choice = input(f"\n❓ Voulez-vous installer la version {update_info['version']}? (o/n): ")
 
-        if zip_file:
-            # Installer
-            if self.install_update(zip_file):
-                print("\n🎉 Mise à jour réussie!")
+        if choice.lower() == 'o':
+            # Télécharger
+            zip_file = self.download_update(update_info['download_url'])
+
+            if zip_file:
+                # Installer
+                if self.install_update(zip_file):
+                    print("\n🎉 Mise à jour réussie!")
+                    print("🔄 Veuillez redémarrer l'application")
+        else:
+            print("❌ Mise à jour annulée")
+
+
+# ============================================
+# EXEMPLE D'UTILISATION
+# ============================================
 
 
 # Configuration
-GITHUB_OWNER = "Thorin-56.fr"  # Exemple: propriétaire du repo
+GITHUB_OWNER = "Thorin-56"  # Exemple: propriétaire du repo
 GITHUB_REPO = "farmland"  # Exemple: nom du repo
-CURRENT_VERSION = "0.2"  # Version actuelle de votre app
+CURRENT_VERSION = "0.3"  # Version actuelle de votre app
 
 # Créer l'updater
 updater = GitHubUpdater(GITHUB_OWNER, GITHUB_REPO, CURRENT_VERSION)
