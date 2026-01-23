@@ -1,3 +1,4 @@
+import json
 import sys
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt
@@ -23,12 +24,30 @@ class MainWindow(QMainWindow):
         self.scrollarea.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scrollarea.setWidgetResizable(True)
-        self.scrollarea.setGeometry(10, 40, 480, 200)
+        self.scrollarea.setGeometry(10, 40, 240, 150)
 
         for i in point["recolt"]:
-            a = QPushButton(f"Recolt {i}")
-            a.clicked.connect(lambda _, fi=i: self.start_recolt(fi))
+            a = QPushButton(f"Recolt {point["dic"][i]}")
+            a.clicked.connect(lambda _, fi=i: self.click_s1(fi))
             self.layout.addWidget(a)
+
+        self.edit_frame = QFrame(self)
+        self.edit_frame.setGeometry(250, 40, 240, 150)
+        self.edit_frame.setStyleSheet("border: 1px solid grey")
+        self.edit_frame.hide()
+
+        self.input_edit = QLineEdit(self.edit_frame)
+        self.input_edit.setGeometry(5, 5, 100, 30)
+
+        self.save_edit = QPushButton("Save", self.edit_frame)
+        self.save_edit.setGeometry(5, 40, 100, 30)
+        self.save_edit.setStyleSheet("border-radius: 5px; background: #4444ff")
+        self.save_edit.clicked.connect(self.edit_recolt_name)
+
+        self.edit_btn = QPushButton("Edit", self)
+        self.edit_btn.clicked.connect(self.sw_edit)
+        self.edit_btn.setStyleSheet("background-color: #4444ff; color: white;")
+        self.edit_btn.setGeometry(10, 5, 100, 30)
 
         self.stop_button = QPushButton("Arrêter", self)
         self.stop_button.setGeometry(170, 5, 150, 30)
@@ -49,6 +68,30 @@ class MainWindow(QMainWindow):
 
         self.pause_event = asyncio.Event()
         self.pause = False
+
+        self.edit = False
+        self.slc_recolt = None
+
+    def sw_edit(self):
+        self.edit = not self.edit
+        if self.edit:
+            self.edit_frame.show()
+        else:
+            self.edit_frame.hide()
+
+    @asyncSlot()
+    async def click_s1(self, name):
+        if not self.edit:
+            await self.start_recolt(name)
+        else:
+            self.input_edit.setText(point["dic"][name])
+            self.slc_recolt = name
+
+    @asyncSlot()
+    async def edit_recolt_name(self):
+        point["dic"][self.slc_recolt] = self.input_edit.text()
+        with open("point.json", "w") as file:
+            json.dump(point, file, indent=1)
 
     @asyncSlot()
     async def start_recolt(self, name):
@@ -75,7 +118,6 @@ class MainWindow(QMainWindow):
                 self.current_tasks.remove(task)
 
     async def run_recolt_with_stop(self, name):
-        """Exécute la récolte avec vérification du stop"""
         await recolt(name)
 
     def stop_tasks(self):
@@ -86,16 +128,26 @@ class MainWindow(QMainWindow):
 
     @asyncSlot()
     async def launch_loop(self):
-        tasks = ["farm", "tree", "animals", "sell"]
+        tasks = point.get("loop")
         self.loop_btn.setText("en cours")
         while not self.stop_flag:
             for task in tasks:
-                await self.start_recolt(task)
+                print(task)
+                match task[0]:
+                    case "recolt":
+                        await self.start_recolt(task[1])
+                    case "sleep":
+                        await asyncio.sleep(task[1])
+                    case "world":
+                        await tp_world(task[1])
+                    case "click":
+                        print("click")
                 if self.stop_flag:
                     break
             if self.stop_flag:
                 break
         self.stop_flag = False
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

@@ -49,11 +49,19 @@ async def click_map():
 async def swip_map():
     pyautogui.dragTo(coo(0.9, 0.5))
     pyautogui.dragRel(-300, 0, 0.2)
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
 
 async def click_recolt():
     pyautogui.click(coo(0.5, 0.85))
     await asyncio.sleep(3)
+
+async def click(co):
+    pyautogui.click(coo(*co))
+
+async def tp_world(name):
+    await click_map()
+    pyautogui.click(coo(*point["tp"][name]))
+    await asyncio.sleep(5)
 
 async def tp_spawn(name):
     await click_map()
@@ -64,7 +72,12 @@ async def recolt(name):
     await tp_spawn(point["recolt"][name]["tp"])
     await asyncio.sleep(0.3)
     for x, y in point["recolt"][name]["move"]:
-        await press(x, y)
+        if x in ["up", "left", "down", "right"]:
+            await press(x, y)
+        elif x == "sleep":
+            await asyncio.sleep(y)
+        elif x == "click":
+            await click(y)
     await click_recolt()
 
 class GitHubUpdater:
@@ -197,31 +210,19 @@ class GitHubUpdater:
         print(f"\n📝 Notes de version:")
         print(update_info.get('notes', 'N/A'))
 
-        # Demander confirmation
-        choice = input(f"\n❓ Voulez-vous installer la version {update_info['version']}? (o/n): ")
+        # Télécharger
+        zip_file = self.download_update(update_info['download_url'])
 
-        if choice.lower() == 'o':
-            # Télécharger
-            zip_file = self.download_update(update_info['download_url'])
-
-            if zip_file:
-                # Installer
-                if self.install_update(zip_file):
-                    print("\n🎉 Mise à jour réussie!")
-                    print("🔄 Veuillez redémarrer l'application")
-        else:
-            print("❌ Mise à jour annulée")
-
-
-# ============================================
-# EXEMPLE D'UTILISATION
-# ============================================
+        if zip_file:
+            # Installer
+            if self.install_update(zip_file):
+                print("\n🎉 Mise à jour réussie!")
 
 
 # Configuration
 GITHUB_OWNER = "Thorin-56"  # Exemple: propriétaire du repo
 GITHUB_REPO = "farmland"  # Exemple: nom du repo
-CURRENT_VERSION = "0.3"  # Version actuelle de votre app
+CURRENT_VERSION = "0.2.1"  # Version actuelle de votre app
 
 # Créer l'updater
 updater = GitHubUpdater(GITHUB_OWNER, GITHUB_REPO, CURRENT_VERSION)
