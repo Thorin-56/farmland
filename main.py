@@ -231,7 +231,7 @@ class GitHubUpdater:
 # Configuration
 GITHUB_OWNER = "Thorin-56.fr"  # Exemple: propriétaire du repo
 GITHUB_REPO = "farmland"  # Exemple: nom du repo
-CURRENT_VERSION = "0.1"  # Version actuelle de votre app
+CURRENT_VERSION = "0.2"  # Version actuelle de votre app
 
 # Créer l'updater
 updater = GitHubUpdater(GITHUB_OWNER, GITHUB_REPO, CURRENT_VERSION)
