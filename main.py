@@ -1,23 +1,18 @@
+import time
+
 import pyautogui
-from ctypes import windll
 import win32gui
-import json
 import asyncio
 import os
-import sys
 import json
 import shutil
 import requests
 import zipfile
-from pathlib import Path
-
-stop_event = asyncio.Event()
-
-pyautogui.FAILSAFE = True
-hdc = windll.user32.GetDC(0)
 
 hwnd = win32gui.FindWindow(None, "Farmland")
 
+assert not not hwnd, ValueError("test")
+print(hwnd)
 stop = False
 
 point: dict
@@ -34,14 +29,6 @@ def coo(x, y):
     pos = rect[0], rect[1] + 90
     taille = rect[2] - pos[0], rect[3] - pos[1]
     return x*taille[0]+pos[0], y*taille[1]+pos[1]
-
-# def getColor(x, y, save_img=False):
-#     color: int = windll.gdi32.GetPixel(hdc, x, y)
-#     r, g, b = color & 0xFF, (color >> 8) & 0xFF, (color >> 16) & 0xFF
-#     if save_img:
-#         a = Image.new("P", (10, 11), (r, g, b))
-#         a.save("img.png")
-#     return color
 
 async def click_map():
     pyautogui.click(coo(*point["gui"]["map"]))
@@ -131,7 +118,8 @@ class GitHubUpdater:
             print(f"❌ Erreur: {str(e)}")
             return {'available': False, 'error': str(e)}
 
-    def download_update(self, download_url, save_path="update.zip"):
+    @staticmethod
+    def download_update(download_url, save_path="update.zip"):
         """Télécharge la mise à jour"""
         try:
             print(f"⬇️  Téléchargement de la mise à jour...")
@@ -155,7 +143,8 @@ class GitHubUpdater:
             print(f"❌ Erreur lors du téléchargement: {str(e)}")
             return None
 
-    def install_update(self, zip_path, install_dir="."):
+    @staticmethod
+    def install_update(zip_path, install_dir="."):
         """Extrait et installe la mise à jour"""
         try:
             print(f"📂 Installation de la mise à jour...")
@@ -233,13 +222,11 @@ updater.run()
 
 if __name__ == '__main__':
 
+    run = True
     async def main():
-        while True:
+        while run:
+            print(1)
             win32gui.SetForegroundWindow(hwnd)
-            await recolt("farm")
-            await recolt("animals")
-            await recolt("tree")
-            await recolt("sell")
-            await asyncio.sleep(60*2)
+            time.sleep(1)
 
     asyncio.run(main())

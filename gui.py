@@ -1,5 +1,3 @@
-import json
-import sys
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt
 from qasync import QEventLoop, asyncSlot
@@ -21,8 +19,8 @@ class MainWindow(QMainWindow):
         self.scrollarea.setWidget(self.widget)
         self.widget.setLayout(self.layout)
 
-        self.scrollarea.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scrollarea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scrollarea.setWidgetResizable(True)
         self.scrollarea.setGeometry(10, 40, 240, 150)
 
@@ -132,7 +130,6 @@ class MainWindow(QMainWindow):
         self.loop_btn.setText("en cours")
         while not self.stop_flag:
             for task in tasks:
-                print(task)
                 match task[0]:
                     case "recolt":
                         await self.start_recolt(task[1])
