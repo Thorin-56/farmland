@@ -122,7 +122,7 @@ class MainWindow(QMainWindow):
         self.stop_flag = True
         for task in self.current_tasks:
             task.cancel()
-        self.status_label.setText("Arrêt en cours...")
+        self.status_label.setText("Arrêt en coursse...")
 
     @asyncSlot()
     async def launch_loop(self):
