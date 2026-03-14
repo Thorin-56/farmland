@@ -1,149 +1,186 @@
-from PySide6.QtWidgets import *
-from PySide6.QtCore import Qt
-from qasync import QEventLoop, asyncSlot
 import asyncio
-from main import *
+import json
+import sys
+
+import qasync
+from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame
+from qasync import QEventLoop, QApplication
+
+from Listerners.Event import ListEvent
+from Listerners.Listener import Listener
+from Listerners.Simulator import Simulator
+from GuiObjects.QObjects import QScrollCategorie
 
 
-class MainWindow(QMainWindow):
-    def __init__(self, parent=None):
-        super(MainWindow, self).__init__(parent)
+class MainWindows(QMainWindow):
+    def __init__(self):
+        super().__init__()
 
-        self.setWindowTitle("AutoFarmland Farmer")
-        self.setFixedWidth(500)
-        self.setFixedHeight(500)
+        self.setWindowTitle("Farmland")
+        self.setGeometry(100, 100, 700, 500)
 
-        self.scrollarea = QScrollArea(self)
-        self.widget = QWidget()
-        self.layout = QVBoxLayout()
-        self.scrollarea.setWidget(self.widget)
-        self.widget.setLayout(self.layout)
+        self.ls = Listener()
 
-        self.scrollarea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        self.scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scrollarea.setWidgetResizable(True)
-        self.scrollarea.setGeometry(10, 40, 240, 150)
+        self.macro = None
 
-        for i in point["recolt"]:
-            a = QPushButton(f"Recolt {point["dic"][i]}")
-            a.clicked.connect(lambda _, fi=i: self.click_s1(fi))
-            self.layout.addWidget(a)
+        self.button = QPushButton("Enregistrer", self)
+        self.button.clicked.connect(self.test)
+        self.button.setGeometry(10, 45, 100, 30)
 
-        self.edit_frame = QFrame(self)
-        self.edit_frame.setGeometry(250, 40, 240, 150)
-        self.edit_frame.setStyleSheet("border: 1px solid grey")
-        self.edit_frame.hide()
+        self.save_button = QPushButton("Save", self)
+        self.save_button.clicked.connect(self.saveMacro)
+        self.save_button.setGeometry(10, 45, 100, 30)
+        self.save_button.hide()
 
-        self.input_edit = QLineEdit(self.edit_frame)
-        self.input_edit.setGeometry(5, 5, 100, 30)
+        self.name_save = QLineEdit(self)
+        self.name_save.setGeometry(10, 80, 100, 30)
+        self.name_save.hide()
 
-        self.save_edit = QPushButton("Save", self.edit_frame)
-        self.save_edit.setGeometry(5, 40, 100, 30)
-        self.save_edit.setStyleSheet("border-radius: 5px; background: #4444ff")
-        self.save_edit.clicked.connect(self.edit_recolt_name)
+        self.cancel_save = QPushButton("Annuler", self)
+        self.cancel_save.setGeometry(10, 115, 100, 30)
+        self.cancel_save.setStyleSheet("background: rgb(200, 0, 0); border: 1px solid white; border-radius: 8px")
+        self.cancel_save.clicked.connect(self.cancelMacro)
+        self.cancel_save.hide()
 
-        self.edit_btn = QPushButton("Edit", self)
-        self.edit_btn.clicked.connect(self.sw_edit)
-        self.edit_btn.setStyleSheet("background-color: #4444ff; color: white;")
-        self.edit_btn.setGeometry(10, 5, 100, 30)
+        self.launch_button = QPushButton("launch", self)
+        self.launch_button.clicked.connect(self.test3)
+        self.launch_button.setGeometry(10, 10, 100, 30)
 
-        self.stop_button = QPushButton("Arrêter", self)
-        self.stop_button.setGeometry(170, 5, 150, 30)
-        self.stop_button.clicked.connect(self.stop_tasks)
-        self.stop_button.setStyleSheet("background-color: #ff4444; color: white;")
+        self.delete_categ_btn = QPushButton("Retirer categ", self)
+        self.delete_categ_btn.setGeometry(110, 10, 100, 30)
+        self.delete_categ_btn.clicked.connect(self.deleteCateg)
 
-        self.loop_btn = QPushButton("Lancer", self)
-        self.loop_btn.setGeometry(170, 250, 150, 30)
-        self.loop_btn.clicked.connect(self.launch_loop)
-        self.loop_btn.setStyleSheet("background-color: rgb(100, 250, 100); color: white;")
+        self.add_categ_btn = QPushButton("ajouter categ", self)
+        self.add_categ_btn.setGeometry(110, 45, 100, 30)
+        self.add_categ_btn.clicked.connect(self.add_categ)
 
-        self.status_label = QLabel("Prêt", self)
-        self.status_label.setGeometry(350, 10, 300, 20)
+        self.add_categ_edit = QLineEdit(self)
+        self.add_categ_edit.setGeometry(110, 80, 100, 30)
 
-        # Liste pour suivre les tâches en cours
-        self.current_tasks = []
-        self.stop_flag = False
+        self.test_scroll = QScrollCategorie(self)
+        self.test_scroll.setGeometry(350, 20, 300, 400)
+        self.loadScroll()
 
-        self.pause_event = asyncio.Event()
-        self.pause = False
+    def add_categ(self):
+        name = self.add_categ_edit.text()
+        with open("point.json", "r") as file:
+            file = json.load(file)
 
-        self.edit = False
-        self.slc_recolt = None
+        file["seq"][name] = {}
+        with open("point.json", "w") as file2:
+            json.dump(file, file2)
+        self.add_categ_edit.clear()
+        self.loadScroll()
+        self.test_scroll.setCurrentCateg(name)
 
-    def sw_edit(self):
-        self.edit = not self.edit
-        if self.edit:
-            self.edit_frame.show()
-        else:
-            self.edit_frame.hide()
+    def deleteCateg(self):
+        name = self.test_scroll.categSlc
+        with open("point.json", "r") as file:
+            file = json.load(file)
+        assert isinstance(file, dict)
+        if len(file["seq"].get(name)):
+            print("ok")
+            return
+        file["seq"].pop(name)
+        with open("point.json", "w") as file2:
+            json.dump(file, file2)
+        self.test_scroll.removeCateg(name)
 
-    @asyncSlot()
-    async def click_s1(self, name):
-        if not self.edit:
-            await self.start_recolt(name)
-        else:
-            self.input_edit.setText(point["dic"][name])
-            self.slc_recolt = name
+    def loadScroll(self):
+        with open("point.json", "r") as file:
+            file = json.load(file)
 
-    @asyncSlot()
-    async def edit_recolt_name(self):
-        point["dic"][self.slc_recolt] = self.input_edit.text()
-        with open("point.json", "w") as file:
-            json.dump(point, file, indent=1)
+        for categ in file.get("seq").keys():
+            self.test_scroll.addCateg(categ)
+            self.test_scroll.setCurrentCateg(categ)
+            self.test_scroll.clear()
+            keys = file.get("seq").get(categ).keys()
 
-    @asyncSlot()
-    async def start_recolt(self, name):
-        self.stop_button.setEnabled(True)
-        self.stop_flag = False
-        self.status_label.setText(f"Récolte {name} en cours...")
+            for i in keys:
+                self.addItem(i)
 
-        try:
-            task = asyncio.create_task(self.run_recolt_with_stop(name))
-            self.current_tasks.append(task)
-            await task
-            if not self.stop_flag:
-                self.status_label.setText(f"Récolte {name} terminée !")
-            else:
-                self.status_label.setText("Arrêté par l'utilisateur")
+        if list(file.get("seq").keys()):
+            self.test_scroll.setCurrentCateg(list(file.get("seq").keys())[0])
 
-        except asyncio.CancelledError:
-            self.status_label.setText("Arrêté")
-        except Exception as e:
-            self.status_label.setText(f"Erreur: {e}")
-        finally:
-            self.stop_button.setEnabled(False)
-            if task in self.current_tasks:
-                self.current_tasks.remove(task)
+    def addItem(self, key):
+        item = QFrame(self.test_scroll)
+        item.setFixedHeight(25)
+        button = QPushButton(key, item)
+        button.clicked.connect(lambda _, fi=key: self.setMacro(fi))
+        button.setGeometry(0, 0, 100, 27)
 
-    async def run_recolt_with_stop(self, name):
-        await recolt(name)
+        delete_button = QPushButton("🗑️", item)
+        delete_button.clicked.connect(lambda _, fi=key: self.deleteMacro(fi))
+        delete_button.setGeometry(120, 0, 100, 27)
+        self.test_scroll.add(item, key)
 
-    def stop_tasks(self):
-        self.stop_flag = True
-        for task in self.current_tasks:
-            task.cancel()
-        self.status_label.setText("Arrêt en coursse...")
+    def setMacro(self, name):
+        self.macro = name
 
-    @asyncSlot()
-    async def launch_loop(self):
-        tasks = point.get("loop")
-        self.loop_btn.setText("en cours")
-        while not self.stop_flag:
-            for task in tasks:
-                match task[0]:
-                    case "recolt":
-                        await self.start_recolt(task[1])
-                    case "sleep":
-                        await asyncio.sleep(task[1])
-                    case "world":
-                        await tp_world(task[1])
-                    case "click":
-                        print("click")
-                if self.stop_flag:
-                    break
-            if self.stop_flag:
-                break
-        self.stop_flag = False
+    def deleteMacro(self, name):
+        with open("point.json", "r") as file:
+            file = json.load(file)
+
+        file["seq"][self.test_scroll.categSlc].pop(name)
+        with open("point.json", "w") as file2:
+            json.dump(file, file2)
+        self.test_scroll.remove(name)
+
+    @qasync.asyncSlot()
+    async def test(self):
+        self.button.setDisabled(True)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.test2)
+        self.button.setDisabled(False)
+
+    def test2(self):
+        self.ls.start()
+        self.ls.join()
+        self.button.hide()
+        self.save_button.show()
+        self.name_save.show()
+        self.cancel_save.show()
+
+    @qasync.asyncSlot()
+    async def test3(self):
+        if not self.macro:
+            return
+        self.launch_button.setDisabled(True)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.test4)
+        self.launch_button.setDisabled(False)
+
+    def test4(self):
+        with open("point.json", "r") as file:
+            file = json.load(file)
+
+        assert isinstance(file, dict)
+        json_events = file["seq"][self.test_scroll.categSlc][self.macro]
+        events = ListEvent(json_events)
+
+        simulator = Simulator(events)
+        simulator.run()
+
+    @qasync.asyncSlot()
+    async def saveMacro(self):
+        text = self.name_save.text()
+        if not text:
+            return
+        self.button.show()
+        self.save_button.hide()
+        self.name_save.clear()
+        self.name_save.hide()
+        self.cancel_save.hide()
+        self.ls.save("point.json", ("seq", self.test_scroll.categSlc, text))
+        self.addItem(text)
+
+    @qasync.asyncSlot()
+    async def cancelMacro(self):
+        self.button.show()
+        self.save_button.hide()
+        self.name_save.clear()
+        self.name_save.hide()
+        self.cancel_save.hide()
 
 
 if __name__ == '__main__':
@@ -152,8 +189,8 @@ if __name__ == '__main__':
     loop = QEventLoop(app)
     asyncio.set_event_loop(loop)
 
-    window = MainWindow()
-    window.show()
+    windows = MainWindows()
+    windows.show()
 
     with loop:
         loop.run_forever()
