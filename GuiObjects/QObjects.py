@@ -34,13 +34,18 @@ class QScroll(QScrollArea):
             if widget.widget():
                 widget.widget().deleteLater()
 
+class QHorizontalScroll(QScroll):
+    def wheelEvent(self, event):
+        scrollbar = self.horizontalScrollBar()
+        scrollbar.setValue(scrollbar.value() - event.angleDelta().y())
+        event.accept()
 
 class QScrollCategorie(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
 
-        self.headers = QScroll(self)
+        self.headers = QHorizontalScroll(self)
         self.headers_height = 30
         self.headers.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.headers.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

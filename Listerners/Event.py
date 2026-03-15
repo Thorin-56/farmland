@@ -12,6 +12,9 @@ class Event:
     def __eq__(self, other: Event):
         return self.type == other.type
 
+    def jsonify(self):
+        pass
+
 class EventKey(Event):
     def __init__(self, key, time=None):
         super().__init__("key", time)
@@ -22,7 +25,7 @@ class EventKey(Event):
             self.key: KeyCode = eval(f"Key.{key[1:]}")
 
     def __str__(self):
-        return f"[{self.time}] [{self.type}] Key: {self.key}"
+        return f"[{self.time}] [{self.type}] Key: {self.key if isinstance(self.key, Key) else chr(self.key.vk)}"
 
     def __eq__(self, other: EventKey):
         if type(other) != type(self):
@@ -47,7 +50,7 @@ class EventKeyRelease(Event):
             self.key: Key | KeyCode = eval(f"Key.{key[1:]}")
 
     def __str__(self):
-        return f"[{self.time}] [{self.type}] Key: {self.key}"
+        return f"[{self.time}] [{self.type}] Key: {self.key if isinstance(self.key, Key) else chr(self.key.vk)}"
 
     def __eq__(self, other: EventKeyRelease):
         if type(other) != type(self):
@@ -66,7 +69,7 @@ class EventClick(Event):
     def __init__(self, btn, pos, time=None):
         super().__init__("click", time)
         self.btn = btn
-        self.pos = pos
+        self.pos: list[int] = pos
 
     def __str__(self):
         return f"[{self.time}] [{self.type}] Button: {self.btn} Pos: {self.pos}"
