@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QLabe
 from PySide6.QtCore import Qt
 from qasync import QEventLoop, QApplication
 
-from GuiObjects.QCustomObjects import QEvent
+from GuiObjects.QCustomObjects import QEvent, QNowEvent
 from Listerners.Event import ListEvent, Event
 from Listerners.Listener import Listener
 from Listerners.Simulator import Simulator
@@ -217,6 +217,7 @@ class MainWindows(QMainWindow):
             item = QEvent(i)
             item.setEditCallback(lambda _, fk=k: self.editMacro(fk))
             item.setSaveCallback(lambda _, fk=k, fi=item: self.saveEditedMacro(fk, fi))
+            item.setAddCallback(lambda _, fk=k: self.addEditedMacro(fk+1))
 
             self.manage_macro.add(item, k)
 
@@ -226,6 +227,17 @@ class MainWindows(QMainWindow):
         self.file = file
         self.setMacro(self.macro)
         self.macro_edited = None
+
+    def deleteEditedMacro(self, index: int):
+        file = self.file
+        file["seq"][self.macro[0]][self.macro[1]].pop(index)
+        self.file = file
+        self.setMacro(self.macro)
+        self.macro_edited = None
+
+    def addEditedMacro(self, index: int):
+        item = QNowEvent()
+        self.manage_macro.insert(index, item, "edit")
 
     def editMacro(self, index):
         old_qevent = self.manage_macro.items.get(self.macro_edited)

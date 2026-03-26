@@ -4,8 +4,8 @@ import copy
 import pynput.keyboard
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt
-from Listerners.Event import Event, EventKey, EventClick, EventKeyRelease
-from GuiObjects.QObjects import QScroll
+from Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch
+from GuiObjects.QObjects import QScroll, QBindKeyButton
 from pynput.keyboard import KeyCode, Key
 import qasync
 
@@ -16,6 +16,7 @@ TABLE = {
     "key release": lambda x, y: f"({x}, {y}, {x})",
     "click": lambda x, y: f"({y}, {x}, {x})",
     "launch": lambda x, y: f"({y}, {x}, {y})",
+    "edit": lambda x, y: f"({y}, {y}, {y})",
 }
 
 class QEvent(QWidget):
@@ -68,10 +69,10 @@ class QEvent(QWidget):
         self.edit_btn.clicked.connect(func)
 
     def setDeleteCallback(self, func):
-        self.edit_btn.clicked.connect(func)
+        self.delete_btn.clicked.connect(func)
 
     def setAddCallback(self, func):
-        self.edit_btn.clicked.connect(func)
+        self.add_btn.clicked.connect(func)
 
     def setSaveCallback(self, func):
         self.save_callbakc = func
@@ -170,4 +171,89 @@ class QEvent(QWidget):
         ls = pynput.keyboard.Listener(on_press=getKey)
         ls.start()
         ls.join()
+
+
+class QNowEvent(QFrame):
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedHeight(250)
+
+        self.setStyleSheet(f"background: rgb{TABLE["edit"](0, 150)}; border-radius: 5px")
+
+        self.event = EventLaunch("", "", 0.0)
+
+        self.vbox = QVBoxLayout()
+        self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self.frame_type = QFrame()
+        self.frame_type.setFixedHeight(30)
+        self.frame_type.setStyleSheet(f"background: rgb{TABLE["edit"](0, 125)}; border-radius: 5px")
+
+        self.label_type = QLabel("Type: ", self.frame_type)
+        self.label_type.setGeometry(5, 0, 100, 30)
+
+        self.combo_type = QComboBox(self.frame_type)
+        self.combo_type.addItems(("click", "key", "key release", "launch"))
+        self.combo_type.setGeometry(110, 0, 100, 30)
+        self.combo_type.currentTextChanged.connect(self.typeChange)
+
+        self.arg_vbox = QScroll()
+        self.arg_vbox.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.arg_vbox.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        frame_categ: QFrame
+        label_categ: QLabel
+
+        self.vbox.addWidget(self.frame_type)
+        self.vbox.addWidget(self.arg_vbox)
+
+        self.setLayout(self.vbox)
+
+    def setType(self, _type):
+        self.arg_vbox.clear()
+        match _type:
+            case "launch":
+                self.frame_categ = QFrame()
+                self.frame_categ.setFixedHeight(30)
+                self.frame_categ.setStyleSheet(f"background: rgb{TABLE["edit"](0, 125)}; border-radius: 5px")
+
+                self.label_categ = QLabel("Categ: ", self.frame_categ)
+                self.label_categ.setGeometry(5, 0, 100, 30)
+
+                self.edit_categ = QLineEdit(self.frame_categ)
+                self.edit_categ.setStyleSheet(f"background: rgb{TABLE["edit"](0, 100)}; border-radius: 5px")
+                self.edit_categ.setGeometry(110, 5, 100, 20)
+
+                self.frame_name = QFrame()
+                self.frame_name.setFixedHeight(30)
+                self.frame_name.setStyleSheet(f"background: rgb{TABLE["edit"](0, 125)}; border-radius: 5px")
+
+                self.label_name = QLabel("Nom: ", self.frame_name)
+                self.label_name.setGeometry(5, 0, 100, 30)
+
+                self.edit_name = QLineEdit(self.frame_name)
+                self.edit_name.setStyleSheet(f"background: rgb{TABLE["edit"](0, 100)}; border-radius: 5px")
+                self.edit_name.setGeometry(110, 5, 100, 20)
+
+                self.arg_vbox.add(self.frame_categ, "categ")
+                self.arg_vbox.add(self.frame_name, "name")
+            case "key" | "key release":
+                self.frame_key = QFrame()
+                self.frame_key.setFixedHeight(30)
+                self.frame_key.setStyleSheet(f"background: rgb{TABLE["edit"](0, 125)}; border-radius: 5px")
+
+                self.label_key = QLabel("Key: ", self.frame_key)
+                self.label_key.setGeometry(5, 0, 100, 30)
+
+                self.ls_key = False
+                self.edit_key = QBindKeyButton(self.frame_key)
+                self.edit_key.setStyleSheet(f"background: rgb{TABLE["edit"](0, 100)}; border-radius: 5px")
+                self.edit_key.setGeometry(110, 5, 100, 20)
+
+                self.arg_vbox.add(self.frame_key, "key")
+
+
+    def typeChange(self, index):
+        self.setType(index)
 

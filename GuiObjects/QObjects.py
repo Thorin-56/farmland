@@ -1,5 +1,8 @@
+import pynput
+import qasync
 from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QPushButton
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
+from pynput.keyboard import Key, KeyCode
 
 
 class QScroll(QScrollArea):
@@ -20,7 +23,16 @@ class QScroll(QScrollArea):
         self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
 
     def add(self, _object, name):
+        if name in list(self.items.keys()):
+            return
         self.vbox.addWidget(_object)
+        self.items.update({name: _object})
+
+
+    def insert(self, index, _object, name):
+        if name in list(self.items.keys()):
+            return
+        self.vbox.insertWidget(index, _object)
         self.items.update({name: _object})
 
     def remove(self, name):
@@ -29,10 +41,9 @@ class QScroll(QScrollArea):
         self.items.pop(name)
 
     def clear(self):
-        while self.vbox.count():
-            widget = self.vbox.takeAt(0)
-            if widget.widget():
-                widget.widget().deleteLater()
+        for i in list(self.items.keys()):
+            self.remove(i)
+
 
 class QHorizontalScroll(QScroll):
     def wheelEvent(self, event):
@@ -122,3 +133,54 @@ class QScrollCategorie(QWidget):
             self.scroll.setGeometry(0, self.headers_height, self.width(), self.height() - self.headers_height)
 
 
+class QBindKeyButton(QPushButton):
+    _keyPressed = Signal(object)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.setText(" ? ")
+        self.__key = None
+        self.ls = None
+
+        self._keyPressed.connect(self._onKeyPressed)
+        self.clicked.connect(self.getKey)
+        self.destroyed.connect(lambda: self.stopOnDestroy(None))
+
+    @staticmethod
+    def stopOnDestroy(ls):
+        if ls is None:
+            return
+        else:
+            ls.stop()
+
+    @qasync.asyncSlot()
+    async def getKey(self):
+        self._stopListener()
+        self.setText("...")
+        self.ls = pynput.keyboard.Listener(on_press=self._getKey)
+        self.destroyed.disconnect()
+        self.destroyed.connect(lambda _, ls1=self.ls: self.stopOnDestroy(ls1))
+        self.ls.start()
+
+    def _getKey(self, key: Key | KeyCode | None):
+        try:
+            self._keyPressed.emit(key)
+        except RuntimeError:
+            pass
+        return False
+
+    def _onKeyPressed(self, key):
+        """Thread Qt."""
+        self.__key = key
+        self.setText(str(key))
+        self._stopListener()
+
+    def _stopListener(self):
+        if self.ls is not None:
+            self.ls.stop()
+            self.ls = None
+
+    @property
+    def key(self):
+        return self.__key
