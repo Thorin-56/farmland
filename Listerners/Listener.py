@@ -1,6 +1,8 @@
 from pynput.mouse import Controller as ConM, Button, Listener as SListM
 from pynput.keyboard import Listener as ListK, Key, KeyCode
 import json
+
+from DataManager.DataManager import DataManager
 from Listerners.Event import EventClick, EventKey, EventKeyRelease, ListEvent
 
 
@@ -48,30 +50,18 @@ class Listener:
     def join(self):
         self.key.join()
 
-    def save(self, file_name, path=("list", "test")):
-        with open(file_name, "r") as file:
-            file = json.load(file)
-        current_path: list[dict] = [file]
-        for k, i in enumerate(path):
-            if k == len(path) - 1:
-                current_path.append({i: self.event.jsonify()})
-            elif current_path[-1].get(i) is not None:
-                current_path.append(current_path[-1].get(i))
-            else:
-                current_path.append({i: {}})
-        value = None
-        for k, i in enumerate(current_path[::-1]):
-            if value is None:
-                value = i[path[-1]]
-            else:
-                i[path[k*-1]] = value
-                value = i
-        with open(file_name, 'w') as file:
-            json.dump(value, file)
+    def save(self, name, categorie, data_manager: DataManager):
+        macro_id = data_manager.addMacro(name, categorie)[0]
+        for event in self.event.jsonify():
+            e_type, e_time, data = event
+            data = str(data)
+            data_manager.addEvent(e_type, e_time, data, macro_id)
+        return macro_id
 
 TABLE_MOUSE = {
     "left": Button.left,
     "right": Button.right,
+    "middle": Button.middle,
 }
 
 TABLE_KEY = {
@@ -83,10 +73,11 @@ TABLE_KEY = {
 }
 
 if __name__ == '__main__':
+    data_manager = DataManager()
+
     ls = Listener()
 
     ls.start()
     ls.join()
 
-    ls.save("../point.json")
-
+    ls.save("Test", "Categ - 1", data_manager)

@@ -1,18 +1,16 @@
 import asyncio
-import json
 import sys
 
 import qasync
-from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QDoubleSpinBox
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame
 from qasync import QEventLoop, QApplication
 
+from DataManager.DataManager import DataManager
 from GuiObjects.QCustomObjects import QEvent, QNowEvent
 from Listerners.Event import ListEvent, Event
 from Listerners.Listener import Listener
 from Listerners.Simulator import Simulator
 from GuiObjects.QObjects import QScrollCategorie, QScroll
-from config import FILE_PATH
 
 
 class MainWindows(QMainWindow):
@@ -25,6 +23,7 @@ class MainWindows(QMainWindow):
         self.ls = Listener()
 
         self.macro = None
+        self.categorie = None
         self.macro_edited = None
 
         self.button = QPushButton("Enregistrer", self)
@@ -77,81 +76,64 @@ class MainWindows(QMainWindow):
 
     def add_categ(self):
         name = self.add_categ_edit.text()
-        with open("point.json", "r") as file:
-            file = json.load(file)
+        categ_id = database_manager.addCategorie(name)[0]
 
-        file["seq"][name] = {}
-        with open("point.json", "w") as file2:
-            json.dump(file, file2)
         self.add_categ_edit.clear()
         self.loadScroll()
-        self.test_scroll.setCurrentCateg(name)
+        self.test_scroll.setCurrentCateg(categ_id)
 
     def deleteCateg(self):
-        name = self.test_scroll.categSlc
-        with open("point.json", "r") as file:
-            file = json.load(file)
-        assert isinstance(file, dict)
-        if len(file["seq"].get(name)):
-            print("ok")
-            return
-        file["seq"].pop(name)
-        with open("point.json", "w") as file2:
-            json.dump(file, file2)
-        self.test_scroll.removeCateg(name)
+        categ_id = self.test_scroll.categSlc
+        database_manager.deleteCategories(categ_id)
+        self.test_scroll.removeCateg(categ_id)
 
     def loadScroll(self):
-        with open("point.json", "r") as file:
-            file = json.load(file)
+        categories = database_manager.getCategories()[1]
 
-        for categ in file.get("seq").keys():
-            self.test_scroll.addCateg(categ)
-            self.test_scroll.setCurrentCateg(categ)
+        for categ in categories:
+            categ_id, categ_name = categ
+            self.test_scroll.addCateg(categ_id, categ_name)
+            self.test_scroll.setCurrentCateg(categ_id)
             self.test_scroll.clear()
-            keys = file.get("seq").get(categ).keys()
 
-            for i in keys:
-                self.addItem((categ, i))
+            for macro in database_manager.getMacroOfCategorie(categ_id)[1]:
+                self.addItem((macro[0], macro[1]))
 
-        if list(file.get("seq").keys()):
-            self.test_scroll.setCurrentCateg(list(file.get("seq").keys())[0])
+        if categories:
+            self.test_scroll.setCurrentCateg(categories[0][0])
 
     def addItem(self, macro: tuple):
         item = QFrame(self.test_scroll)
         item.setFixedHeight(25)
         button = QPushButton(macro[1], item)
-        button.clicked.connect(lambda _, fi=macro: self.setMacro(fi))
+        button.clicked.connect(lambda _, fi=macro[0]: self.setMacro(fi))
         button.setGeometry(0, 0, 100, 27)
 
         delete_button = QPushButton("🗑️", item)
-        delete_button.clicked.connect(lambda _, fi=macro: self.deleteMacro(fi))
+        delete_button.clicked.connect(lambda _, fi=macro[0]: self.deleteMacro(fi))
         delete_button.setGeometry(120, 0, 100, 27)
-        self.test_scroll.add(item, macro[1])
+        self.test_scroll.add(item, macro[0])
 
     def setMacro(self, macro):
         self.macro = macro
+        self.loadEditMacro()
+
+    def setCategorie(self, categorie):
+        self.categorie = categorie
         self.loadEditMacro()
 
     def addMacro(self):
         name = self.add_seq_edit.text()
         if self.test_scroll.categSlc is None:
             return
-        if self.file["seq"][self.test_scroll.categSlc].get(name) is not None:
-            return
-        file = self.file
-        file["seq"][self.test_scroll.categSlc][name] = {}
-        self.file = file
+        macro_id = database_manager.addMacro(name, self.test_scroll.categSlc)
 
-        self.addItem((self.test_scroll.categSlc, name))
+        self.addItem((macro_id, name))
         self.add_seq_edit.clear()
 
     def deleteMacro(self, macro):
-        print(macro)
-        categ, name = macro
-        file = self.file
-        file["seq"][categ].pop(name)
-        self.file = file
-        self.test_scroll.remove(name)
+        database_manager.deleteMacro(macro)
+        self.test_scroll.remove(macro)
 
     @qasync.asyncSlot()
     async def test(self):
@@ -178,12 +160,9 @@ class MainWindows(QMainWindow):
         self.launch_button.setDisabled(False)
 
     def test4(self):
-        with open("point.json", "r") as file:
-            file = json.load(file)
+        events = database_manager.getEventOfMacro(self.macro)[1]
 
-        assert isinstance(file, dict)
-        json_events = file["seq"][self.macro[0]][self.macro[1]]
-        events = ListEvent(json_events)
+        events = ListEvent(events)
 
         simulator = Simulator(events)
         simulator.run()
@@ -198,8 +177,8 @@ class MainWindows(QMainWindow):
         self.name_save.clear()
         self.name_save.hide()
         self.cancel_save.hide()
-        self.ls.save("point.json", ("seq", self.test_scroll.categSlc, text))
-        self.addItem((self.test_scroll.categSlc, text))
+        macro_id = self.ls.save(text, self.test_scroll.categSlc, database_manager)
+        self.addItem((macro_id, text))
 
     @qasync.asyncSlot()
     async def cancelMacro(self):
@@ -211,27 +190,23 @@ class MainWindows(QMainWindow):
 
     def loadEditMacro(self):
         self.manage_macro.clear()
-        events: list[Event] = ListEvent(self.file["seq"][self.macro[0]][self.macro[1]])
+        events: list[Event] = ListEvent(database_manager.getEventOfMacro(self.macro)[1])
         for k, i in enumerate(events):
-
             item = QEvent(i)
             item.setEditCallback(lambda _, fk=k: self.editMacro(fk))
-            item.setSaveCallback(lambda _, fk=k, fi=item: self.saveEditedMacro(fk, fi))
+            item.setSaveCallback(lambda _, fi=item: self.saveEditedMacro(fi))
             item.setAddCallback(lambda _, fk=k: self.addEditedMacro(fk+1))
 
             self.manage_macro.add(item, k)
 
-    def saveEditedMacro(self, index: int, qevent: QEvent):
-        file = self.file
-        file["seq"][self.macro[0]][self.macro[1]][index] = qevent.event_value.jsonify()
-        self.file = file
+    def saveEditedMacro(self, qevent: QEvent):
+        _, time, data = qevent.event_value.jsonify()
+        database_manager.updateEvent(qevent.event_value.id, {"time": time, "data": data})
         self.setMacro(self.macro)
         self.macro_edited = None
 
     def deleteEditedMacro(self, index: int):
-        file = self.file
-        file["seq"][self.macro[0]][self.macro[1]].pop(index)
-        self.file = file
+        database_manager.deleteMacro(index)
         self.setMacro(self.macro)
         self.macro_edited = None
 
@@ -257,21 +232,9 @@ class MainWindows(QMainWindow):
         qevent.setEditMode()
         self.macro_edited = index
 
-
-    @property
-    def file(self):
-        with open(FILE_PATH, "r") as file:
-            file = json.load(file)
-            assert isinstance(file, dict)
-        return file
-
-    @file.setter
-    def file(self, value):
-        assert isinstance(value, dict)
-        with open(FILE_PATH, "w") as file:
-            json.dump(value, file)
-
 if __name__ == '__main__':
+    database_manager = DataManager()
+
     app = QApplication(sys.argv)
 
     main_loop = QEventLoop(app)

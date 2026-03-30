@@ -55,7 +55,6 @@ class QScrollCategorie(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
         self.headers = QHorizontalScroll(self)
         self.headers_height = 30
         self.headers.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -67,42 +66,42 @@ class QScrollCategorie(QWidget):
 
         self.scroll: QScroll | None = None
 
-        self.categ: dict[str, QWidget] = {}
+        self.categ: dict[str, dict[str, QWidget]] = {}
         self.categ_h = {}
         self.categSlc = None
 
-    def setCurrentCateg(self, name):
+    def setCurrentCateg(self, _id):
         if self.categSlc:
-            self.categ_h[self.categSlc].setStyleSheet("color: white")
+            self.categ_h[self.categSlc]["button"].setStyleSheet("color: white")
             self.scroll.hide()
 
-        self.categSlc = name
-        self.scroll = self.categ[name]
+        self.categSlc = _id
+        self.scroll = self.categ[_id]["scroll"]
         self.scroll.setGeometry(0, self.headers_height, self.width(), self.height() - self.headers_height)
         self.scroll.show()
 
-        self.categ_h[name].setStyleSheet("color: red")
+        self.categ_h[_id]["button"].setStyleSheet("color: red")
 
-    def addCateg(self, name):
-        if name in self.categ.keys():
+    def addCateg(self, _id, name):
+        if _id in self.categ.keys():
             return
 
         scroll = QScroll(self)
         scroll.hide()
-        self.categ.update({name: scroll})
+        self.categ.update({_id: {"name": name, "scroll": scroll}})
         button = QPushButton(name)
         button.setFixedSize(100, self.headers_height - 4)
-        button.clicked.connect(lambda _, fi=name: self.setCurrentCateg(fi))
-        self.categ_h.update({name: button})
-        self.headers.add(button, name)
+        button.clicked.connect(lambda _, fi=_id: self.setCurrentCateg(fi))
+        self.categ_h.update({_id: {"name": name, "button": button}})
+        self.headers.add(button, _id)
         if self.categSlc is None:
-            self.setCurrentCateg(name)
+            self.setCurrentCateg(_id)
 
     def removeCateg(self, name):
         if name not in self.categ.keys():
             return
-        self.categ[name].deleteLater()
-        self.categ_h[name].deleteLater()
+        self.categ[name]["scroll"].deleteLater()
+        self.categ_h[name]["button"].deleteLater()
         self.categ.pop(name)
         self.categ_h.pop(name)
         if self.categSlc == name:
@@ -158,6 +157,7 @@ class QBindKeyButton(QPushButton):
     async def getKey(self):
         self._stopListener()
         self.setText("...")
+        self.clicked.disconnect()
         self.ls = pynput.keyboard.Listener(on_press=self._getKey)
         self.destroyed.disconnect()
         self.destroyed.connect(lambda _, ls1=self.ls: self.stopOnDestroy(ls1))
@@ -168,10 +168,10 @@ class QBindKeyButton(QPushButton):
             self._keyPressed.emit(key)
         except RuntimeError:
             pass
+        self.clicked.connect(self.getKey)
         return False
 
     def _onKeyPressed(self, key):
-        """Thread Qt."""
         self.__key = key
         self.setText(str(key))
         self._stopListener()
