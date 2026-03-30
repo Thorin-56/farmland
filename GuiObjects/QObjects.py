@@ -3,6 +3,7 @@ import qasync
 from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QPushButton
 from PySide6.QtCore import Qt, Signal
 from pynput.keyboard import Key, KeyCode
+from pynput.mouse import Button
 
 
 class QScroll(QScrollArea):
@@ -184,3 +185,59 @@ class QBindKeyButton(QPushButton):
     @property
     def key(self):
         return self.__key
+
+
+class QBindMouseButton(QPushButton):
+    _btnPressed = Signal(object)
+    changed = Signal(object)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.setText(" ? ")
+        self.__btn = None
+        self.ls = None
+
+        self._btnPressed.connect(self._onBtnPressed)
+        self.clicked.connect(self.getBtn)
+        self.destroyed.connect(lambda: self.stopOnDestroy(None))
+
+    @staticmethod
+    def stopOnDestroy(ls):
+        if ls is None:
+            return
+        else:
+            ls.stop()
+
+    @qasync.asyncSlot()
+    async def getBtn(self):
+        self._stopListener()
+        self.setText("...")
+        self.clicked.disconnect()
+        self.ls = pynput.mouse.Listener(on_click=self._getBtn)
+        self.destroyed.disconnect()
+        self.destroyed.connect(lambda _, ls1=self.ls: self.stopOnDestroy(ls1))
+        self.ls.start()
+
+    def _getBtn(self, _, __, btn: Button):
+        try:
+            self._btnPressed.emit(btn)
+        except RuntimeError:
+            pass
+        self.clicked.connect(self.getBtn)
+        return False
+
+    def _onBtnPressed(self, btn: Button):
+        self.__btn = btn
+        self.setText(btn.name)
+        self.changed.emit(btn)
+        self._stopListener()
+
+    def _stopListener(self):
+        if self.ls is not None:
+            self.ls.stop()
+            self.ls = None
+
+    @property
+    def btn(self):
+        return self.__btn
+

@@ -52,10 +52,10 @@ class Listener:
 
     def save(self, name, categorie, data_manager: DataManager):
         macro_id = data_manager.addMacro(name, categorie)[0]
-        for event in self.event.jsonify():
+        for position, event in enumerate(self.event.jsonify()):
             e_type, e_time, data = event
             data = str(data)
-            data_manager.addEvent(e_type, e_time, data, macro_id)
+            data_manager.addEvent(e_type, e_time, data, macro_id, position+1)
         return macro_id
 
 TABLE_MOUSE = {

@@ -21,11 +21,12 @@ class Event:
 class EventKey(Event):
     def __init__(self, key, time=None, _id=None):
         super().__init__("key", time, _id)
-        if key[0] == "1":
-            self.key: KeyCode = KeyCode.from_vk(int(key[1:]))
-        else:
-            assert key[0] == "0"
-            self.key: KeyCode = eval(f"Key.{key[1:]}")
+        if key:
+            if key[0] == "1":
+                self.key: KeyCode = KeyCode.from_vk(int(key[1:]))
+            else:
+                assert key[0] == "0"
+                self.key: KeyCode = eval(f"Key.{key[1:]}")
 
     def __str__(self):
         return f"[{self.time}] [{self.type}] Key: {self.key if isinstance(self.key, Key) else chr(self.key.vk)}"
@@ -124,7 +125,7 @@ class ListEvent(list):
         assert isinstance(events, list)
         final_events = []
         for event in events:
-            e_id, e_type, e_time, macro_id, data, _, _, _ = event
+            e_id, e_type, e_time, macro_id, data = event
             data = eval(data)
             match e_type:
                 case "key":

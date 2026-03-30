@@ -5,7 +5,7 @@ import pynput.keyboard
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt
 from Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch
-from GuiObjects.QObjects import QScroll, QBindKeyButton
+from GuiObjects.QObjects import QScroll, QBindKeyButton, QBindMouseButton
 from pynput.keyboard import KeyCode, Key
 import qasync
 
@@ -65,6 +65,14 @@ class QEvent(QWidget):
         self.hbox.addWidget(self.main_frame, 3)
         self.hbox.addWidget(self.frame_btn, 1)
 
+    @staticmethod
+    def updateValue(func):
+        def wrapper(self: QEvent, *args, **kwargs):
+            result =  func(self, *args, **kwargs)
+            self.save_btn.setDisabled(self.event_value.jsonify() == self.event_original.jsonify())
+            return result
+        return wrapper
+
     def setEditCallback(self, func):
         self.edit_btn.clicked.connect(func)
 
@@ -90,7 +98,7 @@ class QEvent(QWidget):
         time.setRange(0, 9999)
         time.setSingleStep(0.01)
         time.setValue(self.event_value.time)
-        time.valueChanged.connect(lambda x: self.event_value.__setattr__("time", round(x, 2)))
+        time.valueChanged.connect(self.setTime)
 
         label_time.setGeometry(5, 0, 50, 30)
         time.setGeometry(55, 0, 90, 30)
@@ -114,6 +122,9 @@ class QEvent(QWidget):
             label_frame_pos.setGeometry(5, 0, 50, 30)
             pos_x.setGeometry(55, 0, 90, 30)
             pos_y.setGeometry(150, 0, 90, 30)
+
+            pos_x.valueChanged.connect(self.setPositionX)
+            pos_y.valueChanged.connect(self.setPositionY)
             self.config_area.add(frame_pos, "pos")
 
             frame_btn = QFrame()
@@ -126,6 +137,8 @@ class QEvent(QWidget):
 
             label_frame_btn.setGeometry(5, 0, 50, 30)
             btn_combo.setGeometry(55, 0, 150, 30)
+            btn_combo.currentTextChanged.connect(self.setBtn)
+            btn_combo.setCurrentText(self.event_value.btn)
             self.config_area.add(frame_btn, "btn")
 
         if self.event_value.type == "key" or self.event_value.type == "key release":
@@ -146,15 +159,30 @@ class QEvent(QWidget):
             self.key_selecteur.setGeometry(55, 5, 90, 20)
             self.config_area.add(frame_key, "key")
 
+        self.reset_btn = QPushButton("Reset")
+        self.reset_btn.setFixedHeight(30)
+        self.reset_btn.clicked.connect(self.reset_value)
+        self.reset_btn.setStyleSheet(f"""
+                        QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
+                        QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
+                    """)
+
         self.save_btn = QPushButton("Save")
         self.save_btn.setFixedHeight(30)
         self.save_btn.clicked.connect(self.save_callbakc)
+        self.save_btn.setDisabled(True)
         self.save_btn.setStyleSheet(f"""
                         QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
                         QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
                     """)
 
+        self.config_area.add(self.reset_btn, "reset")
         self.config_area.add(self.save_btn, "save")
+
+    @updateValue
+    def reset_value(self):
+        self.config_area.clear()
+        self.setEditMode()
 
     @qasync.asyncSlot()
     async def setKey(self):
@@ -162,6 +190,26 @@ class QEvent(QWidget):
         loop = asyncio.get_event_loop()
         loop.run_in_executor(None, self.setKey2)
 
+    @updateValue
+    def setPositionX(self, value):
+        assert isinstance(self.event_value, EventClick)
+        self.event_value.pos[0] = value
+
+    @updateValue
+    def setPositionY(self, value):
+        assert isinstance(self.event_value, EventClick)
+        self.event_value.pos[1] = value
+
+    @updateValue
+    def setBtn(self, value):
+        assert isinstance(self.event_value, EventClick)
+        self.event_value.btn = value
+
+    @updateValue
+    def setTime(self, value):
+        self.event_value.time = round(value, 2)
+
+    @updateValue
     def setKey2(self):
         def getKey(key: Key | KeyCode | None):
             assert isinstance(self.event_value, EventKey | EventKeyRelease)
@@ -210,50 +258,159 @@ class QNowEvent(QFrame):
 
         self.setLayout(self.vbox)
 
+        self.setType("click")
+
     def setType(self, _type):
         self.arg_vbox.clear()
+        self.setStyleSheet(f"background: rgb{TABLE[_type](25, 75)}; border-radius: 5px")
+
+        frame_time = QFrame()
+        frame_time.setFixedHeight(30)
+        frame_time.setStyleSheet(f"background: rgb{TABLE[_type](125, 125)}; border-radius: 5px")
+
+        label_time = QLabel("Time: ", frame_time)
+        label_time.setGeometry(5, 0, 100, 30)
+
+        edit_time = QDoubleSpinBox(frame_time)
+        edit_time.setRange(0, 99999)
+        edit_time.setSingleStep(0.01)
+        edit_time.setStyleSheet(f"background: rgb{TABLE[_type](50, 200)}; border-radius: 5px")
+        edit_time.setGeometry(110, 5, 100, 20)
+
+        self.arg_vbox.add(frame_time, "time")
         match _type:
             case "launch":
-                self.frame_categ = QFrame()
-                self.frame_categ.setFixedHeight(30)
-                self.frame_categ.setStyleSheet(f"background: rgb{TABLE["edit"](0, 125)}; border-radius: 5px")
+                self.setTypeLaunch()
+                self.event = EventLaunch(None, 0)
+            case "key":
+                self.setTypeKey()
+                self.event = EventKey(None, 0)
+            case "key release":
+                self.setTypeKeyRelease()
+                self.event = EventKeyRelease(None, 0)
+            case "click":
+                self.setTypeClick()
+                self.event = EventClick(None, [0, 0], 0)
 
-                self.label_categ = QLabel("Categ: ", self.frame_categ)
-                self.label_categ.setGeometry(5, 0, 100, 30)
+        save_btn = QPushButton("Save")
+        save_btn.setFixedHeight(30)
+        save_btn.setStyleSheet(f"background: rgb{TABLE[_type](0, 255)}; border-radius: 5px")
 
-                self.edit_categ = QLineEdit(self.frame_categ)
-                self.edit_categ.setStyleSheet(f"background: rgb{TABLE["edit"](0, 100)}; border-radius: 5px")
-                self.edit_categ.setGeometry(110, 5, 100, 20)
-
-                self.frame_name = QFrame()
-                self.frame_name.setFixedHeight(30)
-                self.frame_name.setStyleSheet(f"background: rgb{TABLE["edit"](0, 125)}; border-radius: 5px")
-
-                self.label_name = QLabel("Nom: ", self.frame_name)
-                self.label_name.setGeometry(5, 0, 100, 30)
-
-                self.edit_name = QLineEdit(self.frame_name)
-                self.edit_name.setStyleSheet(f"background: rgb{TABLE["edit"](0, 100)}; border-radius: 5px")
-                self.edit_name.setGeometry(110, 5, 100, 20)
-
-                self.arg_vbox.add(self.frame_categ, "categ")
-                self.arg_vbox.add(self.frame_name, "name")
-            case "key" | "key release":
-                self.frame_key = QFrame()
-                self.frame_key.setFixedHeight(30)
-                self.frame_key.setStyleSheet(f"background: rgb{TABLE["edit"](0, 125)}; border-radius: 5px")
-
-                self.label_key = QLabel("Key: ", self.frame_key)
-                self.label_key.setGeometry(5, 0, 100, 30)
-
-                self.ls_key = False
-                self.edit_key = QBindKeyButton(self.frame_key)
-                self.edit_key.setStyleSheet(f"background: rgb{TABLE["edit"](0, 100)}; border-radius: 5px")
-                self.edit_key.setGeometry(110, 5, 100, 20)
-
-                self.arg_vbox.add(self.frame_key, "key")
-
+        self.arg_vbox.add(save_btn, "save")
 
     def typeChange(self, index):
         self.setType(index)
 
+    def setTypeLaunch(self):
+
+        frame_categ = QFrame()
+        frame_categ.setFixedHeight(30)
+        frame_categ.setStyleSheet(f"background: rgb{TABLE["edit"](125, 125)}; border-radius: 5px")
+
+        label_categ = QLabel("Categ: ", frame_categ)
+        label_categ.setGeometry(5, 0, 100, 30)
+
+        edit_categ = QLineEdit(frame_categ)
+        edit_categ.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px")
+        edit_categ.setGeometry(110, 5, 100, 20)
+
+        frame_name = QFrame()
+        frame_name.setFixedHeight(30)
+        frame_name.setStyleSheet(f"background: rgb{TABLE["edit"](125, 125)}; border-radius: 5px")
+
+        label_name = QLabel("Nom: ", frame_name)
+        label_name.setGeometry(5, 0, 100, 30)
+
+        edit_name = QLineEdit(frame_name)
+        edit_name.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px")
+        edit_name.setGeometry(110, 5, 100, 20)
+
+        self.arg_vbox.add(frame_categ, "categ")
+        self.arg_vbox.add(frame_name, "name")
+
+    def setTypeKey(self):
+        frame_key = QFrame()
+        frame_key.setFixedHeight(30)
+        frame_key.setStyleSheet(f"background: rgb{TABLE["key"](125, 125)}; border-radius: 5px")
+
+        label_key = QLabel("Key: ", frame_key)
+        label_key.setGeometry(5, 0, 100, 30)
+
+        edit_key = QBindKeyButton(frame_key)
+        edit_key.setStyleSheet(f"background: rgb{TABLE["key"](50, 200)}; border-radius: 5px")
+        edit_key.setGeometry(110, 5, 100, 20)
+
+        self.arg_vbox.add(frame_key, "key")
+
+    def setTypeKeyRelease(self):
+        frame_key = QFrame()
+        frame_key.setFixedHeight(30)
+        frame_key.setStyleSheet(f"background: rgb{TABLE["key release"](125, 125)}; border-radius: 5px")
+
+        label_key = QLabel("Key: ", frame_key)
+        label_key.setGeometry(5, 0, 100, 30)
+
+        edit_key = QBindKeyButton(frame_key)
+        edit_key.setStyleSheet(f"background: rgb{TABLE["key release"](50, 200)}; border-radius: 5px")
+        edit_key.setGeometry(110, 5, 100, 20)
+
+        self.arg_vbox.add(frame_key, "key")
+
+    def setTypeClick(self):
+        frame_click = QFrame()
+        frame_click.setFixedHeight(30)
+        frame_click.setStyleSheet(f"background: rgb{TABLE["click"](125, 125)}; border-radius: 5px")
+
+        label_click = QLabel("Bouton: ", frame_click)
+        label_click.setGeometry(5, 0, 100, 30)
+
+        edit_click = QBindMouseButton(frame_click)
+        edit_click.setStyleSheet(f"background: rgb{TABLE["click"](50, 200)}; border-radius: 5px")
+        edit_click.setGeometry(110, 5, 100, 20)
+        edit_click.changed.connect(self.setBtn)
+
+        frame_pos_x = QFrame()
+        frame_pos_x.setFixedHeight(30)
+        frame_pos_x.setStyleSheet(f"background: rgb{TABLE["click"](125, 125)}; border-radius: 5px")
+
+        label_pos_x = QLabel("Position X: ", frame_pos_x)
+        label_pos_x.setGeometry(5, 0, 100, 30)
+
+        edit_pos_x = QSpinBox(frame_pos_x)
+        edit_pos_x.setRange(-9999, 9999)
+        edit_pos_x.setStyleSheet(f"background: rgb{TABLE["click"](50, 200)}; border-radius: 5px")
+        edit_pos_x.setGeometry(110, 5, 100, 20)
+        edit_pos_x.valueChanged.connect(self.setPosX)
+
+        frame_pos_y = QFrame()
+        frame_pos_y.setFixedHeight(30)
+        frame_pos_y.setStyleSheet(f"background: rgb{TABLE["click"](125, 125)}; border-radius: 5px")
+
+        label_pos_y = QLabel("Position Y: ", frame_pos_y)
+        label_pos_y.setGeometry(5, 0, 100, 30)
+
+        edit_pos_y = QSpinBox(frame_pos_y)
+        edit_pos_y.setRange(-9999, 9999)
+        edit_pos_y.setStyleSheet(f"background: rgb{TABLE["click"](50, 200)}; border-radius: 5px")
+        edit_pos_y.setGeometry(110, 5, 100, 20)
+        edit_pos_x.valueChanged.connect(self.setPosY)
+
+        self.arg_vbox.add(frame_click, "button")
+        self.arg_vbox.add(frame_pos_x, "pos_x")
+        self.arg_vbox.add(frame_pos_y, "pos_y")
+
+    def setBtn(self, value):
+        assert isinstance(self.event, EventClick)
+        self.event.btn = value
+
+    def setPosX(self, value):
+        assert isinstance(self.event, EventClick)
+        self.event.pos[0] = value
+
+    def setPosY(self, value):
+        assert isinstance(self.event, EventClick)
+        self.event.pos[1] = value
+
+    def setKey(self, value):
+        assert isinstance(self.event, EventKey)
+        self.event.key = value

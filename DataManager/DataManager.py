@@ -52,6 +52,7 @@ class DataManager:
                                     references macros
                                         on update cascade on delete cascade,
                                 data     TEXT  default '{}' not null,
+                                position integer            not null,
                                 constraint check_type
                                     check (type in ('key', 'key release', 'launch', 'sleep', 'click', 'move'))
                             );""")
@@ -59,8 +60,8 @@ class DataManager:
     def addMacro(self, name, categorie) -> tuple[int]:
         return self.__execute__("INSERT INTO macros (name, categorie) VALUES (?, ?)", (name, categorie))
 
-    def addEvent(self, e_type, time, data, macro_id) -> tuple[int]:
-        return self.__execute__("INSERT INTO events (type, time, macro_id, data) VALUES (?, ?, ?, ?)", (e_type, time, macro_id, data))
+    def addEvent(self, e_type, time, data, macro_id, position) -> tuple[int]:
+        return self.__execute__("INSERT INTO events (type, time, macro_id, data, position) VALUES (?, ?, ?, ?, ?)", (e_type, time, macro_id, data, position*1000))
 
     def addCategorie(self, name) -> tuple[int]:
         return self.__execute__("INSERT INTO categories (name) VALUES (?)", (name, ))
@@ -69,7 +70,7 @@ class DataManager:
         return self.__execute__("SELECT * FROM macros JOIN categories ON categorie=categories.id WHERE categorie = ?", (categorie, ), fetchall=True)
 
     def getEventOfMacro(self, macro_id) -> tuple[int, list]:
-        return self.__execute__("SELECT * FROM events JOIN macros ON macro_id=macros.id WHERE macro_id = ?", (macro_id, ), fetchall=True)
+        return self.__execute__("SELECT events.id, type, time, macro_id, data FROM events JOIN macros ON macro_id=macros.id WHERE macro_id = ? ORDER BY position", (macro_id, ), fetchall=True)
 
     def getCategories(self) -> tuple[int, list]:
         return self.__execute__("SELECT * FROM categories", fetchall=True)

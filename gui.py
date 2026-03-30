@@ -195,7 +195,7 @@ class MainWindows(QMainWindow):
             item = QEvent(i)
             item.setEditCallback(lambda _, fk=k: self.editMacro(fk))
             item.setSaveCallback(lambda _, fi=item: self.saveEditedMacro(fi))
-            item.setAddCallback(lambda _, fk=k: self.addEditedMacro(fk+1))
+            item.setAddCallback(lambda _, fk=k, fi=i.id: self.addEditedMacro(fk+1, fi))
 
             self.manage_macro.add(item, k)
 
@@ -210,7 +210,7 @@ class MainWindows(QMainWindow):
         self.setMacro(self.macro)
         self.macro_edited = None
 
-    def addEditedMacro(self, index: int):
+    def addEditedMacro(self, index: int, _id):
         item = QNowEvent()
         self.manage_macro.insert(index, item, "edit")
 
