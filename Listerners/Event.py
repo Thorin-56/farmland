@@ -27,6 +27,8 @@ class EventKey(Event):
             else:
                 assert key[0] == "0"
                 self.key: KeyCode = eval(f"Key.{key[1:]}")
+        else:
+            self.key = None
 
     def __str__(self):
         return f"[{self.time}] [{self.type}] Key: {self.key if isinstance(self.key, Key) else chr(self.key.vk)}"

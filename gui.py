@@ -195,7 +195,8 @@ class MainWindows(QMainWindow):
             item = QEvent(i)
             item.setEditCallback(lambda _, fk=k: self.editMacro(fk))
             item.setSaveCallback(lambda _, fi=item: self.saveEditedMacro(fi))
-            item.setAddCallback(lambda _, fk=k, fi=i.id: self.addEditedMacro(fk+1, fi))
+            item.setAddCallback(lambda _, fk=k, fi=i.id: self.addEditedMacro(fk+1, fi, self.macro))
+            item.setDeleteCallback(lambda _, fi=i.id, fk=k: self.deleteEditedMacro(fi, fk))
 
             self.manage_macro.add(item, k)
 
@@ -205,13 +206,19 @@ class MainWindows(QMainWindow):
         self.setMacro(self.macro)
         self.macro_edited = None
 
-    def deleteEditedMacro(self, index: int):
-        database_manager.deleteMacro(index)
+    def deleteEditedMacro(self, _id, index: int):
+        database_manager.deleteEvent(_id)
+        self.manage_macro.remove(index)
         self.setMacro(self.macro)
         self.macro_edited = None
 
-    def addEditedMacro(self, index: int, _id):
+    def addEditedMacro(self, index: int, _id, macro_id):
+        def saveEvent(_id, macro_id, event: Event):
+            e_type, e_time, data = event.jsonify()
+            data = str(data)
+            database_manager.insertEvent(_id, e_type, e_time, data, macro_id)
         item = QNowEvent()
+        item.setSaveCallback(lambda event: saveEvent(_id, macro_id, event))
         self.manage_macro.insert(index, item, "edit")
 
     def editMacro(self, index):

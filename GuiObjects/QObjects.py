@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QPushButton
 from PySide6.QtCore import Qt, Signal
 from pynput.keyboard import Key, KeyCode
 from pynput.mouse import Button
+from shiboken6.Shiboken import Object
 
 
 class QScroll(QScrollArea):
@@ -135,7 +136,7 @@ class QScrollCategorie(QWidget):
 
 class QBindKeyButton(QPushButton):
     _keyPressed = Signal(object)
-
+    changed = Signal(object)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -175,6 +176,7 @@ class QBindKeyButton(QPushButton):
     def _onKeyPressed(self, key):
         self.__key = key
         self.setText(str(key))
+        self.changed.emit(key)
         self._stopListener()
 
     def _stopListener(self):

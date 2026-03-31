@@ -9,8 +9,6 @@ from GuiObjects.QObjects import QScroll, QBindKeyButton, QBindMouseButton
 from pynput.keyboard import KeyCode, Key
 import qasync
 
-from Listerners.Listener import Listener
-
 TABLE = {
     "key": lambda x, y: f"({x}, {x}, {y})",
     "key release": lambda x, y: f"({x}, {y}, {x})",
@@ -229,7 +227,9 @@ class QNowEvent(QFrame):
 
         self.setStyleSheet(f"background: rgb{TABLE["edit"](0, 150)}; border-radius: 5px")
 
-        self.event = EventLaunch("", "", 0.0)
+        self.current_event = EventLaunch("", "", 0.0)
+
+        self.save_callback = None
 
         self.vbox = QVBoxLayout()
         self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -276,27 +276,37 @@ class QNowEvent(QFrame):
         edit_time.setSingleStep(0.01)
         edit_time.setStyleSheet(f"background: rgb{TABLE[_type](50, 200)}; border-radius: 5px")
         edit_time.setGeometry(110, 5, 100, 20)
+        edit_time.valueChanged.connect(self.setTime)
 
         self.arg_vbox.add(frame_time, "time")
         match _type:
             case "launch":
                 self.setTypeLaunch()
-                self.event = EventLaunch(None, 0)
+                self.current_event = EventLaunch(None, 0)
             case "key":
                 self.setTypeKey()
-                self.event = EventKey(None, 0)
+                self.current_event = EventKey(None, 0)
             case "key release":
                 self.setTypeKeyRelease()
-                self.event = EventKeyRelease(None, 0)
+                self.current_event = EventKeyRelease(None, 0)
             case "click":
                 self.setTypeClick()
-                self.event = EventClick(None, [0, 0], 0)
+                self.current_event = EventClick(None, [0, 0], 0)
 
         save_btn = QPushButton("Save")
         save_btn.setFixedHeight(30)
+        save_btn.clicked.connect(self.save_event)
+        # save_btn.setDisabled(True)
         save_btn.setStyleSheet(f"background: rgb{TABLE[_type](0, 255)}; border-radius: 5px")
 
         self.arg_vbox.add(save_btn, "save")
+
+    def setSaveCallback(self, func):
+        self.save_callback = func
+
+    def save_event(self):
+        if self.save_callback:
+            self.save_callback(self.current_event)
 
     def typeChange(self, index):
         self.setType(index)
@@ -339,6 +349,7 @@ class QNowEvent(QFrame):
         edit_key = QBindKeyButton(frame_key)
         edit_key.setStyleSheet(f"background: rgb{TABLE["key"](50, 200)}; border-radius: 5px")
         edit_key.setGeometry(110, 5, 100, 20)
+        edit_key.changed.connect(self.setKey)
 
         self.arg_vbox.add(frame_key, "key")
 
@@ -353,6 +364,7 @@ class QNowEvent(QFrame):
         edit_key = QBindKeyButton(frame_key)
         edit_key.setStyleSheet(f"background: rgb{TABLE["key release"](50, 200)}; border-radius: 5px")
         edit_key.setGeometry(110, 5, 100, 20)
+        edit_key.changed.connect(self.setKey)
 
         self.arg_vbox.add(frame_key, "key")
 
@@ -400,17 +412,20 @@ class QNowEvent(QFrame):
         self.arg_vbox.add(frame_pos_y, "pos_y")
 
     def setBtn(self, value):
-        assert isinstance(self.event, EventClick)
-        self.event.btn = value
+        assert isinstance(self.current_event, EventClick)
+        self.current_event.btn = value.name
 
     def setPosX(self, value):
-        assert isinstance(self.event, EventClick)
-        self.event.pos[0] = value
+        assert isinstance(self.current_event, EventClick)
+        self.current_event.pos[0] = value
 
     def setPosY(self, value):
-        assert isinstance(self.event, EventClick)
-        self.event.pos[1] = value
+        assert isinstance(self.current_event, EventClick)
+        self.current_event.pos[1] = value
 
     def setKey(self, value):
-        assert isinstance(self.event, EventKey)
-        self.event.key = value
+        assert isinstance(self.current_event, EventKey)
+        self.current_event.key = value
+
+    def setTime(self, value):
+        self.current_event.time = round(value, 2)

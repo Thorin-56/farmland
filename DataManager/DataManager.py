@@ -93,3 +93,12 @@ class DataManager:
 
     def updateCategories(self, categorie_id, data: dict) -> tuple[int, list]:
         return self.__execute__(f"UPDATE categories SET {", ".join([f"{key} = {value}" for key, value in data.items()])} WHERE id = ?", (categorie_id, ))
+
+    def insertEvent(self, _id, e_type, time, data, macro_id):
+        pos_1 = self.__execute__("SELECT position FROM events WHERE id = ?", (_id, ), fetchone=True)[1][0][0]
+        pos_2 = self.__execute__("SELECT position FROM events WHERE position > ? AND macro_id = ?", (pos_1, macro_id), fetchone=True)[1][0][0]
+        if pos_2:
+            position = pos_1 + ((pos_2 - pos_1) // 2)
+        else:
+            position = pos_1 + 1000
+        return self.__execute__("INSERT INTO events (type, time, macro_id, data, position) VALUES (?, ?, ?, ?, ?)", (e_type, time, macro_id, data, position))
