@@ -19,6 +19,7 @@ class MainWindows(QMainWindow):
 
         self.setWindowTitle("Farmland")
         self.setGeometry(100, 100, 700, 500)
+        self.setFixedSize(1000, 750)
 
         self.ls = Listener()
 
@@ -68,11 +69,11 @@ class MainWindows(QMainWindow):
         self.add_seq_edit.setGeometry(210, 45, 100, 30)
 
         self.test_scroll = QScrollCategorie(self)
-        self.test_scroll.setGeometry(10, 150, 300, 300)
+        self.test_scroll.setGeometry(325, 10, 275, 700)
         self.loadScroll()
 
         self.manage_macro = QScroll(self)
-        self.manage_macro.setGeometry(310, 10, 400, 440)
+        self.manage_macro.setGeometry(600, 10, 400, 700)
 
     def add_categ(self):
         name = self.add_categ_edit.text()

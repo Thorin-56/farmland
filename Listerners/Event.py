@@ -3,6 +3,47 @@ from pynput.mouse import Button
 from pynput.keyboard import KeyCode, Key
 
 from VARS import TABLE_MOUSE, database_manager
+from enum import Enum
+
+
+class PosBase(Enum):
+    SCREEN = 1
+    WINDOWS = 2
+
+
+class Pos:
+    def __init__(self, x_value, x_pourcent_height, x_pourcent_width, y_value, y_pourcent_height, y_pourcent_width,
+                 windows_name):
+        self.base: PosBase = PosBase.SCREEN
+        if self.base == PosBase.WINDOWS:
+            self.windows_name = windows_name
+        else:
+            self.windows_name = None
+
+        self.x_pourcent_width = x_pourcent_width
+        self.x_pourcent_height = x_pourcent_height
+        self.x_value = x_value
+
+        self.y_pourcent_width = y_pourcent_width
+        self.y_pourcent_height = y_pourcent_height
+        self.y_value = y_value
+
+    def calcul(self, x, y, width, height):
+        position_x = 0
+        position_x += width * self.x_pourcent_width / 100
+        position_x += height * self.x_pourcent_height / 100
+
+        position_x += self.x_value
+        position_x += x
+
+        position_y = 0
+        position_y += width * self.y_pourcent_width / 100
+        position_y += height * self.y_pourcent_height / 100
+
+        position_y += self.y_value
+        position_y += y
+
+        return position_x, position_y
 
 
 class Event:
@@ -22,6 +63,7 @@ class Event:
 
     def isValable(self):
         pass
+
 
 class EventKey(Event):
     def __init__(self, key, time=None, _id=None):
@@ -54,10 +96,12 @@ class EventKey(Event):
     def isValable(self):
         return isinstance(self.key, KeyCode) or isinstance(self.key, Key)
 
+
 class EventKeyRelease(EventKey):
     def __init__(self, key, time=None, _id=None):
         super().__init__(key, time, _id)
         self.type = "key release"
+
 
 class EventClick(Event):
     def __init__(self, btn, pos, time=None, _id=None):
@@ -79,6 +123,7 @@ class EventClick(Event):
     def isValable(self):
         return self.btn in TABLE_MOUSE.keys()
 
+
 class EventMove(Event):
     def __init__(self, btn, pos_src, pos_dst, time=None, _id=None):
         super().__init__("move", time, _id)
@@ -92,7 +137,8 @@ class EventMove(Event):
     def __eq__(self, other: EventMove):
         if type(other) != type(self):
             return False
-        return (self.type, self.btn, self.pos_src, self.pos_dst) == (other.type, other.btn, other.pos_src, other.pos_dst)
+        return (self.type, self.btn, self.pos_src, self.pos_dst) == (other.type, other.btn, other.pos_src,
+                                                                     other.pos_dst)
 
     def jsonify(self):
         return self.type, self.time, {"btn": self.btn, "pos_src": self.pos_src, "pos_dst": self.pos_dst}
@@ -115,6 +161,7 @@ class EventSleep(Event):
             return False
         return (self.type, self.time) == (other.type, other.time)
 
+
 class EventLaunch(Event):
     def __init__(self, macro, time=None, _id=None):
         super().__init__("launch", time, _id)
@@ -133,6 +180,7 @@ class EventLaunch(Event):
 
     def isValable(self):
         return isinstance(self.macro, int)
+
 
 class ListEvent(list):
     def __init__(self, events=None):
@@ -166,7 +214,8 @@ class ListEvent(list):
             super().append(event)
 
     def append(self, __object: Event):
-        if isinstance(__object, EventKey) and __object.key in self.key_pressed and not isinstance(__object, EventKeyRelease):
+        if isinstance(__object, EventKey) and __object.key in self.key_pressed and not isinstance(__object,
+                                                                                                  EventKeyRelease):
             return
 
         if not self or __object != self[-1]:
