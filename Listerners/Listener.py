@@ -1,7 +1,5 @@
 from pynput.mouse import Controller as ConM, Button, Listener as SListM
 from pynput.keyboard import Listener as ListK, Key, KeyCode
-import json
-
 from DataManager.DataManager import DataManager
 from Listerners.Event import EventClick, EventKey, EventKeyRelease, ListEvent
 
@@ -58,22 +56,7 @@ class Listener:
             data_manager.addEvent(e_type, e_time, data, macro_id, position+1)
         return macro_id
 
-TABLE_MOUSE = {
-    "left": Button.left,
-    "right": Button.right,
-    "middle": Button.middle,
-}
-
-TABLE_KEY = {
-    "left": Key.left,
-    "right": Key.right,
-    "up": Key.up,
-    "down": Key.down,
-    "space": Key.space
-}
-
 if __name__ == '__main__':
-    data_manager = DataManager()
 
     ls = Listener()
 

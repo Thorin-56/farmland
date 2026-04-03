@@ -78,6 +78,8 @@ class QScrollCategorie(QWidget):
             self.scroll.hide()
 
         self.categSlc = _id
+        if self.categSlc is None:
+            return
         self.scroll = self.categ[_id]["scroll"]
         self.scroll.setGeometry(0, self.headers_height, self.width(), self.height() - self.headers_height)
         self.scroll.show()

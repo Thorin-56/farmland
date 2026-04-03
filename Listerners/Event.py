@@ -1,7 +1,9 @@
 import datetime
-import json
-
+from pynput.mouse import Button
 from pynput.keyboard import KeyCode, Key
+
+from VARS import TABLE_MOUSE, database_manager
+
 
 class Event:
     def __init__(self, _type, time=None, _id=None):
@@ -17,6 +19,9 @@ class Event:
 
     def jsonify(self):
         return self.type, self.time, {}
+
+    def isValable(self):
+        pass
 
 class EventKey(Event):
     def __init__(self, key, time=None, _id=None):
@@ -46,6 +51,9 @@ class EventKey(Event):
             value["key"] = f"1{self.key.vk}"
         return self.type, self.time, value
 
+    def isValable(self):
+        return isinstance(self.key, KeyCode) or isinstance(self.key, Key)
+
 class EventKeyRelease(EventKey):
     def __init__(self, key, time=None, _id=None):
         super().__init__(key, time, _id)
@@ -68,6 +76,9 @@ class EventClick(Event):
     def jsonify(self):
         return self.type, self.time, {"btn": self.btn, "pos": self.pos}
 
+    def isValable(self):
+        return self.btn in TABLE_MOUSE.keys()
+
 class EventMove(Event):
     def __init__(self, btn, pos_src, pos_dst, time=None, _id=None):
         super().__init__("move", time, _id)
@@ -85,6 +96,12 @@ class EventMove(Event):
 
     def jsonify(self):
         return self.type, self.time, {"btn": self.btn, "pos_src": self.pos_src, "pos_dst": self.pos_dst}
+
+    def isValable(self):
+        return (isinstance(self.btn, Button) and
+                len(self.pos_src) == 2 and isinstance(self.pos_src[0], int) and isinstance(self.pos_src[1], int) and
+                len(self.pos_dst) == 2 and isinstance(self.pos_dst[0], int) and isinstance(self.pos_dst[1], int))
+
 
 class EventSleep(Event):
     def __init__(self, time=None, _id=None):
@@ -104,7 +121,7 @@ class EventLaunch(Event):
         self.macro = macro
 
     def __str__(self):
-        return f"[{self.time}] [{self.type}] Macro: {self.macro}"
+        return f"[{self.time}] [{self.type}] Macro: [{self.macro}] {database_manager.getMacro(self.macro)[1][0][1]}"
 
     def __eq__(self, other: EventLaunch):
         if type(other) != type(self):
@@ -113,6 +130,9 @@ class EventLaunch(Event):
 
     def jsonify(self):
         return self.type, self.time, {"macro": self.macro}
+
+    def isValable(self):
+        return isinstance(self.macro, int)
 
 class ListEvent(list):
     def __init__(self, events=None):

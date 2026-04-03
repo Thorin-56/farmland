@@ -5,7 +5,7 @@ import qasync
 from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame
 from qasync import QEventLoop, QApplication
 
-from DataManager.DataManager import DataManager
+from VARS import database_manager
 from GuiObjects.QCustomObjects import QEvent, QNowEvent
 from Listerners.Event import ListEvent, Event
 from Listerners.Listener import Listener
@@ -126,7 +126,7 @@ class MainWindows(QMainWindow):
         name = self.add_seq_edit.text()
         if self.test_scroll.categSlc is None:
             return
-        macro_id = database_manager.addMacro(name, self.test_scroll.categSlc)
+        macro_id = database_manager.addMacro(name, self.test_scroll.categSlc)[0]
 
         self.addItem((macro_id, name))
         self.add_seq_edit.clear()
@@ -191,7 +191,13 @@ class MainWindows(QMainWindow):
     def loadEditMacro(self):
         self.manage_macro.clear()
         events: list[Event] = ListEvent(database_manager.getEventOfMacro(self.macro)[1])
+        button = QPushButton("➕")
+        button.setFixedHeight(30)
+        button.clicked.connect(lambda _: self.addEditedMacro(0, None, self.macro))
+        self.manage_macro.add(button, "buton")
+
         for k, i in enumerate(events):
+            k += 1
             item = QEvent(i)
             item.setEditCallback(lambda _, fk=k: self.editMacro(fk))
             item.setSaveCallback(lambda _, fi=item: self.saveEditedMacro(fi))
@@ -213,13 +219,19 @@ class MainWindows(QMainWindow):
         self.macro_edited = None
 
     def addEditedMacro(self, index: int, _id, macro_id):
-        def saveEvent(_id, macro_id, event: Event):
-            e_type, e_time, data = event.jsonify()
-            data = str(data)
-            database_manager.insertEvent(_id, e_type, e_time, data, macro_id)
         item = QNowEvent()
-        item.setSaveCallback(lambda event: saveEvent(_id, macro_id, event))
+        item.setSaveCallback(lambda event: self.saveEvent(_id, macro_id, event))
+        item.setCancelCallback(lambda: self.cancelAddEvent(item))
         self.manage_macro.insert(index, item, "edit")
+
+    def saveEvent(self, _id, macro_id, event: Event):
+        e_type, e_time, data = event.jsonify()
+        data = str(data)
+        database_manager.insertEvent(_id, e_type, e_time, data, macro_id)
+        self.setMacro(self.macro)
+
+    def cancelAddEvent(self, item: QNowEvent):
+        self.manage_macro.remove("edit")
 
     def editMacro(self, index):
         old_qevent = self.manage_macro.items.get(self.macro_edited)
@@ -240,8 +252,6 @@ class MainWindows(QMainWindow):
         self.macro_edited = index
 
 if __name__ == '__main__':
-    database_manager = DataManager()
-
     app = QApplication(sys.argv)
 
     main_loop = QEventLoop(app)

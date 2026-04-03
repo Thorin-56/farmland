@@ -1,6 +1,6 @@
 import json
 import time
-from Listerners.Listener import TABLE_MOUSE, TABLE_KEY
+from VARS import TABLE_MOUSE, TABLE_KEY, database_manager
 from Listerners.Event import ListEvent, EventKey, EventKeyRelease, EventClick, EventSleep, EventLaunch
 from pynput.mouse import Controller as ConM
 from pynput.keyboard import Controller as ConK
@@ -29,9 +29,6 @@ class Simulator:
                     pass
                 case "launch":
                     assert isinstance(event, EventLaunch)
-                    with open(FILE_PATH, "r") as file:
-                        file = json.load(file)
-                    assert isinstance(file, dict)
-                    event_json = file["seq"][event.categ][event.name]
-                    ls = ListEvent(event_json)
+                    events = database_manager.getEventOfMacro(event.macro)[1]
+                    ls = ListEvent(events)
                     Simulator(ls).run()

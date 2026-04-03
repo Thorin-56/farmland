@@ -9,6 +9,8 @@ from GuiObjects.QObjects import QScroll, QBindKeyButton, QBindMouseButton
 from pynput.keyboard import KeyCode, Key
 import qasync
 
+from VARS import database_manager
+
 TABLE = {
     "key": lambda x, y: f"({x}, {x}, {y})",
     "key release": lambda x, y: f"({x}, {y}, {x})",
@@ -102,6 +104,23 @@ class QEvent(QWidget):
         time.setGeometry(55, 0, 90, 30)
         self.config_area.add(frame_time, "time")
 
+        self.reset_btn = QPushButton("Reset")
+        self.reset_btn.setFixedHeight(30)
+        self.reset_btn.clicked.connect(self.reset_value)
+        self.reset_btn.setStyleSheet(f"""
+                                QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
+                                QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
+                            """)
+
+        self.save_btn = QPushButton("Save")
+        self.save_btn.setFixedHeight(30)
+        self.save_btn.clicked.connect(self.save_callbakc)
+        self.save_btn.setDisabled(True)
+        self.save_btn.setStyleSheet(f"""
+                                QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
+                                QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
+                            """)
+
         if self.event_value.type == "click":
             assert isinstance(self.event_value, EventClick)
             frame_pos = QFrame()
@@ -157,23 +176,6 @@ class QEvent(QWidget):
             self.key_selecteur.setGeometry(55, 5, 90, 20)
             self.config_area.add(frame_key, "key")
 
-        self.reset_btn = QPushButton("Reset")
-        self.reset_btn.setFixedHeight(30)
-        self.reset_btn.clicked.connect(self.reset_value)
-        self.reset_btn.setStyleSheet(f"""
-                        QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
-                        QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
-                    """)
-
-        self.save_btn = QPushButton("Save")
-        self.save_btn.setFixedHeight(30)
-        self.save_btn.clicked.connect(self.save_callbakc)
-        self.save_btn.setDisabled(True)
-        self.save_btn.setStyleSheet(f"""
-                        QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
-                        QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
-                    """)
-
         self.config_area.add(self.reset_btn, "reset")
         self.config_area.add(self.save_btn, "save")
 
@@ -220,16 +222,17 @@ class QEvent(QWidget):
 
 
 class QNowEvent(QFrame):
-
+    save_btn: QPushButton
     def __init__(self):
         super().__init__()
-        self.setFixedHeight(250)
+        self.setFixedHeight(275)
 
         self.setStyleSheet(f"background: rgb{TABLE["edit"](0, 150)}; border-radius: 5px")
 
         self.current_event = EventLaunch("", "", 0.0)
 
         self.save_callback = None
+        self.cancel_callback = None
 
         self.vbox = QVBoxLayout()
         self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -260,6 +263,14 @@ class QNowEvent(QFrame):
 
         self.setType("click")
 
+    @staticmethod
+    def updateValue(func):
+        def wrapper(self: QNowEvent, *args, **kwargs):
+            result = func(self, *args, **kwargs)
+            self.save_btn.setDisabled(not self.current_event.isValable())
+            return result
+        return wrapper
+
     def setType(self, _type):
         self.arg_vbox.clear()
         self.setStyleSheet(f"background: rgb{TABLE[_type](25, 75)}; border-radius: 5px")
@@ -281,25 +292,35 @@ class QNowEvent(QFrame):
         self.arg_vbox.add(frame_time, "time")
         match _type:
             case "launch":
-                self.setTypeLaunch()
                 self.current_event = EventLaunch(None, 0)
+                self.setTypeLaunch()
             case "key":
-                self.setTypeKey()
                 self.current_event = EventKey(None, 0)
+                self.setTypeKey()
             case "key release":
-                self.setTypeKeyRelease()
                 self.current_event = EventKeyRelease(None, 0)
+                self.setTypeKeyRelease()
             case "click":
-                self.setTypeClick()
                 self.current_event = EventClick(None, [0, 0], 0)
+                self.setTypeClick()
 
-        save_btn = QPushButton("Save")
-        save_btn.setFixedHeight(30)
-        save_btn.clicked.connect(self.save_event)
-        # save_btn.setDisabled(True)
-        save_btn.setStyleSheet(f"background: rgb{TABLE[_type](0, 255)}; border-radius: 5px")
+        self.save_btn = QPushButton("Save")
+        self.save_btn.setFixedHeight(30)
+        self.save_btn.clicked.connect(self.save_event)
+        self.save_btn.setDisabled(not self.current_event.isValable())
+        self.save_btn.setStyleSheet(f" QPushButton {{background: rgb{TABLE[_type](0, 255)}; border-radius: 5px}} "
+                               f" QPushButton:hover {{ background: rgb{TABLE[_type](0, 200)}; }}")
+        self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self.arg_vbox.add(save_btn, "save")
+        self.cancel_btn = QPushButton("Annuler")
+        self.cancel_btn.setFixedHeight(30)
+        self.cancel_btn.clicked.connect(self.cancel)
+        self.cancel_btn.setStyleSheet(f" QPushButton {{background: rgb{TABLE[_type](0, 255)}; border-radius: 5px}} "
+                               f" QPushButton:hover {{ background: rgb{TABLE[_type](0, 200)}; }}")
+        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.arg_vbox.add(self.save_btn, "save")
+        self.arg_vbox.add(self.cancel_btn, "cancel")
 
     def setSaveCallback(self, func):
         self.save_callback = func
@@ -307,6 +328,13 @@ class QNowEvent(QFrame):
     def save_event(self):
         if self.save_callback:
             self.save_callback(self.current_event)
+
+    def setCancelCallback(self, func):
+        self.cancel_callback = func
+
+    def cancel(self):
+        if self.cancel_callback:
+            self.cancel_callback()
 
     def typeChange(self, index):
         self.setType(index)
@@ -320,9 +348,11 @@ class QNowEvent(QFrame):
         label_categ = QLabel("Categ: ", frame_categ)
         label_categ.setGeometry(5, 0, 100, 30)
 
-        edit_categ = QLineEdit(frame_categ)
+        edit_categ = QComboBox(frame_categ)
         edit_categ.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px")
         edit_categ.setGeometry(110, 5, 100, 20)
+        categories = database_manager.getCategories()[1]
+        edit_categ.addItems([f"[{categorie[0]}] {categorie[1]}" for categorie in categories])
 
         frame_name = QFrame()
         frame_name.setFixedHeight(30)
@@ -331,12 +361,20 @@ class QNowEvent(QFrame):
         label_name = QLabel("Nom: ", frame_name)
         label_name.setGeometry(5, 0, 100, 30)
 
-        edit_name = QLineEdit(frame_name)
+        edit_name = QComboBox(frame_name)
         edit_name.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px")
         edit_name.setGeometry(110, 5, 100, 20)
+        edit_name.addItems([f"[{macro[0]}] {macro[1]}" for macro in database_manager.getMacroOfCategorie(categories[0][0])[1]])
+
+        edit_categ.currentTextChanged.connect(lambda text: [edit_name.clear(), edit_name.addItems([f"[{macro[0]}] {macro[1]}" for macro in database_manager.getMacroOfCategorie(text[1:text.index(']')])[1] ])])
+        edit_name.currentTextChanged.connect(lambda text: self.setMacro( int(text[1:text.index(']')]) if text else None ))
+
+        edit_name.setCurrentIndex(-1)
+        edit_name.setCurrentIndex(0)
 
         self.arg_vbox.add(frame_categ, "categ")
         self.arg_vbox.add(frame_name, "name")
+
 
     def setTypeKey(self):
         frame_key = QFrame()
@@ -411,21 +449,31 @@ class QNowEvent(QFrame):
         self.arg_vbox.add(frame_pos_x, "pos_x")
         self.arg_vbox.add(frame_pos_y, "pos_y")
 
+    @updateValue
     def setBtn(self, value):
         assert isinstance(self.current_event, EventClick)
         self.current_event.btn = value.name
 
+    @updateValue
     def setPosX(self, value):
         assert isinstance(self.current_event, EventClick)
         self.current_event.pos[0] = value
 
+    @updateValue
     def setPosY(self, value):
         assert isinstance(self.current_event, EventClick)
         self.current_event.pos[1] = value
 
+    @updateValue
     def setKey(self, value):
         assert isinstance(self.current_event, EventKey)
         self.current_event.key = value
 
+    @updateValue
     def setTime(self, value):
         self.current_event.time = round(value, 2)
+
+    @updateValue
+    def setMacro(self, value):
+        assert isinstance(self.current_event, EventLaunch)
+        self.current_event.macro = value
