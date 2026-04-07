@@ -22,7 +22,9 @@ class Simulator:
                     ConK().release(TABLE_KEY.get(event.key) or event.key)
                 case "click":
                     assert isinstance(event, EventClick)
-                    ConM().position = event.pos
+                    x, y, width, height = 0, 0, 0, 0
+
+                    ConM().position = event.pos.calcul()
                     ConM().click(TABLE_MOUSE[event.btn])
                 case "time":
                     assert isinstance(event, EventSleep)

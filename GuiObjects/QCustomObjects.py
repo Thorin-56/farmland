@@ -130,11 +130,11 @@ class QEvent(QWidget):
             label_frame_pos = QLabel("Pos x, y:", frame_pos)
             pos_x = QSpinBox(frame_pos)
             pos_x.setRange(-9999, 9999)
-            pos_x.setValue(self.event_value.pos[0])
+            pos_x.setValue(self.event_value.pos.x_value)
 
             pos_y = QSpinBox(frame_pos)
             pos_y.setRange(-9999, 9999)
-            pos_y.setValue(self.event_value.pos[1])
+            pos_y.setValue(self.event_value.pos.y_value)
 
             label_frame_pos.setGeometry(5, 0, 50, 30)
             pos_x.setGeometry(55, 0, 90, 30)
@@ -193,12 +193,12 @@ class QEvent(QWidget):
     @updateValue
     def setPositionX(self, value):
         assert isinstance(self.event_value, EventClick)
-        self.event_value.pos[0] = value
+        self.event_value.pos.x_value = value
 
     @updateValue
     def setPositionY(self, value):
         assert isinstance(self.event_value, EventClick)
-        self.event_value.pos[1] = value
+        self.event_value.pos.y_value = value
 
     @updateValue
     def setBtn(self, value):
@@ -457,12 +457,12 @@ class QNowEvent(QFrame):
     @updateValue
     def setPosX(self, value):
         assert isinstance(self.current_event, EventClick)
-        self.current_event.pos[0] = value
+        self.current_event.pos.x_value = value
 
     @updateValue
     def setPosY(self, value):
         assert isinstance(self.current_event, EventClick)
-        self.current_event.pos[1] = value
+        self.current_event.pos.y_value = value
 
     @updateValue
     def setKey(self, value):

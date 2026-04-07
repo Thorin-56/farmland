@@ -12,9 +12,9 @@ class PosBase(Enum):
 
 
 class Pos:
-    def __init__(self, x_value, x_pourcent_height, x_pourcent_width, y_value, y_pourcent_height, y_pourcent_width,
-                 windows_name):
-        self.base: PosBase = PosBase.SCREEN
+    def __init__(self, base=PosBase.SCREEN, windows_name=None, x_value=0, x_pourcent_height=0, x_pourcent_width=0, y_value=0, y_pourcent_height=0,
+                 y_pourcent_width=0):
+        self.base: PosBase = {"SCREEN": PosBase.SCREEN, "WINDOWS": PosBase.WINDOWS}[base]
         if self.base == PosBase.WINDOWS:
             self.windows_name = windows_name
         else:
@@ -45,6 +45,8 @@ class Pos:
 
         return position_x, position_y
 
+    def jsonify(self):
+        return self.base, self.windows_name, self.x_value, self.x_pourcent_width, self.x_pourcent_height, self.y_value, self.y_pourcent_width, self.y_pourcent_height
 
 class Event:
     def __init__(self, _type, time=None, _id=None):
@@ -107,7 +109,7 @@ class EventClick(Event):
     def __init__(self, btn, pos, time=None, _id=None):
         super().__init__("click", time, _id)
         self.btn = btn
-        self.pos: list[int] = pos
+        self.pos: Pos = pos
 
     def __str__(self):
         return f"[{self.time}] [{self.type}] Button: {self.btn} Pos: {self.pos}"
@@ -195,7 +197,8 @@ class ListEvent(list):
         assert isinstance(events, list)
         final_events = []
         for event in events:
-            e_id, e_type, e_time, macro_id, data = event
+            (e_id, e_type, e_time, macro_id, data, pos_id, base, windows_name,
+             x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value) = event
             data = eval(data)
             match e_type:
                 case "key":
@@ -203,6 +206,8 @@ class ListEvent(list):
                 case "key release":
                     final_events.append(EventKeyRelease(time=e_time, _id=e_id, **data))
                 case "click":
+                    data["pos"] = Pos(base, windows_name, x_value, x_pourcent_height, x_pourcent_width, y_value,
+                                      y_pourcent_height, y_pourcent_width)
                     final_events.append(EventClick(time=e_time, _id=e_id, **data))
                 case "move":
                     final_events.append(EventMove(time=e_time, _id=e_id, **data))

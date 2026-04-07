@@ -60,12 +60,32 @@ class DataManager:
                                 constraint check_type
                                     check (type in ('key', 'key release', 'launch', 'sleep', 'click', 'move'))
                             );""")
+        self.__execute__("""create table IF NOT EXISTS positions
+                            (
+                                id                integer not null
+                                    constraint Positions_pk
+                                        primary key autoincrement
+                                    constraint Positions_pk_2
+                                        unique,
+                                base              TEXT    not null,
+                                windows_name      TEXT,
+                                x_pourcent_width  INTEGER not null,
+                                x_pourcent_height INTEGER not null,
+                                x_value           INTEGER not null,
+                                y_pourcent_width  INTEGER not null,
+                                y_pourcent_height INTEGER not null,
+                                y_value           INTEGER not null
+                            );""")
 
     def addMacro(self, name, categorie) -> tuple[int]:
         return self.__execute__("INSERT INTO macros (name, categorie) VALUES (?, ?)", (name, categorie))
 
     def addEvent(self, e_type, time, data, macro_id, position) -> tuple[int]:
         return self.__execute__("INSERT INTO events (type, time, macro_id, data, position) VALUES (?, ?, ?, ?, ?)", (e_type, time, macro_id, data, position*1000))
+
+    def addPosition(self, base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, event_id) -> tuple[int]:
+        return self.__execute__("INSERT INTO positions (base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (base, windows_name,
+             x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, event_id))
 
     def addCategorie(self, name) -> tuple[int]:
         return self.__execute__("INSERT INTO categories (name) VALUES (?)", (name, ))
