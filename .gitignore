@@ -3,4 +3,4 @@ __pycache__
 .idea
 img.png
 test.py
-point.json
+point.db

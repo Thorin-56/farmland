@@ -1,7 +1,7 @@
 from pynput.mouse import Button
 from pynput.keyboard import Key
 
-from DataManager.DataManager import DataManager
+from Types.DataManager.DataManager import DataManager
 
 TABLE_MOUSE = {
     "left": Button.left,

@@ -39,8 +39,7 @@ class QScroll(QScrollArea):
 
     def remove(self, name):
         self.vbox.removeWidget(self.items[name])
-        self.items[name].deleteLater()
-        self.items.pop(name)
+        self.items.pop(name).deleteLater()
 
     def clear(self):
         for i in list(self.items.keys()):
