@@ -1,10 +1,24 @@
 import pynput
 import qasync
-from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QPushButton
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QPushButton, QSpinBox, QDoubleSpinBox
+from PySide6.QtCore import Qt, Signal, QSize
 from pynput.keyboard import Key, KeyCode
 from pynput.mouse import Button
-from shiboken6.Shiboken import Object
+
+class CompactSpinBox(QSpinBox):
+    def sizeHint(self):
+        sh = super().sizeHint()
+        return QSize(sh.width() - 25, sh.height())
+
+class CompactDoubleSpinBox(QDoubleSpinBox):
+    roundedValueChanged = Signal(float)
+    def sizeHint(self):
+        sh = super().sizeHint()
+        return QSize(sh.width() - 25, sh.height())
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        super().valueChanged.connect(lambda v: self.roundedValueChanged.emit(round(v, self.decimals())))
 
 
 class QScroll(QScrollArea):
@@ -188,6 +202,14 @@ class QBindKeyButton(QPushButton):
     @property
     def key(self):
         return self.__key
+
+    @key.setter
+    def key(self, value):
+        self.__key = value
+
+    def setValue(self, value):
+        self.key = value
+        self.setText(str(value))
 
 
 class QBindMouseButton(QPushButton):

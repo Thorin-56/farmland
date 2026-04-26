@@ -37,8 +37,8 @@ class Pos:
 
         self.preview: Window | None = None
         self.preview2: WindowBorder | None = None
-        self.timer = None
-        self.timer2 = None
+        self.timer: QTimer | None = None
+        self.timer2: QTimer | None = None
 
 
     def calcul(self, x, y, width, height):
@@ -67,6 +67,7 @@ class Pos:
         if self.timer:
             self.timer.stop()
             self.timer = None
+        self.remove_preview()
 
     def startUpdateMarges(self):
         self.timer2 = QTimer()
@@ -91,7 +92,10 @@ class Pos:
         if self.base == PosBase.WINDOWS:
             windows_rect = get_windows_pos(self.windows_name)
             if not windows_rect:
+                self.timer2.setInterval(2000)
                 return
+            if self.timer2.interval() == 2000:
+                self.timer2.setInterval(10)
             windows_size = (windows_rect[2] - windows_rect[0], windows_rect[3] - windows_rect[1])
             x, y = windows_rect[:2]
             width, height = windows_size
@@ -124,7 +128,10 @@ class Pos:
         if self.base == PosBase.WINDOWS:
             windows_rect = get_windows_pos(self.windows_name)
             if not windows_rect:
+                self.timer.setInterval(2000)
                 return
+            elif self.timer.interval() == 2000:
+                self.timer.setInterval(10)
             windows_size = (windows_rect[2] - windows_rect[0], windows_rect[3] - windows_rect[1])
             x, y = windows_rect[:2]
             width, height = windows_size
@@ -158,7 +165,10 @@ class Pos:
             self.preview2 = None
 
     def __str__(self):
-        return f"{self.x_pourcent_width}% + {self.x_value}; {self.y_pourcent_width}% + {self.y_value}"
+        if self.base:
+            return f"{self.base.name} {self.windows_name} {self.x_pourcent_width}% + {self.x_pourcent_height}%  + {self.x_value}; {self.y_pourcent_width}% + {self.y_pourcent_height}% + {self.y_value}"
+        else:
+            return f"{self.x_value}; {self.y_value}"
 
     def jsonify(self):
         return self.base.name if self.base else None, self.windows_name, self.x_pourcent_width, self.x_pourcent_height, self.x_value, self.y_pourcent_width, self.y_pourcent_height, self.y_value, str(self.margins)

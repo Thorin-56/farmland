@@ -1,14 +1,12 @@
-import asyncio
 import copy
+from typing import Generic, TypeVar
 
-import pynput.keyboard
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import *
-from PySide6.QtCore import Qt
-from Types.Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch
-from Types.GuiObjects.QObjects import QScroll, QBindKeyButton, QBindMouseButton
-from pynput.keyboard import KeyCode, Key
-import qasync
 
+from Types.GuiObjects.QObjects import CompactSpinBox, CompactDoubleSpinBox
+from Types.GuiObjects.QObjects import QScroll, QBindKeyButton, QBindMouseButton
+from Types.Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch
 from VARS import database_manager
 
 TABLE = {
@@ -19,38 +17,361 @@ TABLE = {
     "edit": lambda x, y: f"({y}, {y}, {y})",
 }
 
-class QEvent(QWidget):
+T = TypeVar("T", bound=Event)
 
-    key_selecteur: QPushButton
-    save_btn: QPushButton
-    def __init__(self, event: Event):
+
+class Meta(type):
+    def __call__(cls, *args, **kwargs):
+        instance = super().__call__(*args, **kwargs)  # exécute __init__ en entier
+        instance._post_init()                               # puis seulement après
+        return instance
+
+
+class ConfigItem(Generic[T], metaclass=Meta):
+    signal = Signal(object)
+    _type = None
+    def __new__(cls, parent: QScroll, event: T):
+        if cls != ConfigItem:
+            return object.__new__(cls)
+
+        event_type = type(event)
+        for sub in cls.__subclasses__():
+            if sub._type == event_type:
+                o = object.__new__(sub)
+                return o
+        return None
+
+    def __init__(self, parent: QScroll, event: T):
+        self.parent = parent
+        self.items: dict[str, QWidget] = {}
+        self.original_event = event
+        self.event = copy.deepcopy(event)
+
+        frame_time = self.addFrame("time")
+        self.label_time = QLabel("Temps")
+        self.edit_time = CompactDoubleSpinBox(suffix=" secondes", minimum=0, maximum=9999, singleStep=0.01)
+        self.edit_time.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.edit_time.roundedValueChanged.connect(self.setTime)
+        frame_time.addWidget(self.label_time)
+        frame_time.addWidget(self.edit_time)
+
+    def _post_init(self):
+        reset_button = self.addButton("Reset", "reset")
+        self.addButton("Sauvegarder", "save")
+        if reset_button:
+            reset_button.clicked.connect(lambda _: self.resetValues())
+        self.resetValues()
+
+    @staticmethod
+    def updateValue(func):
+        def wrapper(self: ConfigItem, *args, **kwargs):
+            result =  func(self, *args, **kwargs)
+            save_button = self.items.get("save")
+            if save_button:
+                save_button.setDisabled(self.original_event.jsonify() == self.event.jsonify())
+            return result
+        return wrapper
+
+    @staticmethod
+    def resetValue(func):
+        def wrapper(self: ConfigItem, *args, **kwargs):
+            self.event = copy.deepcopy(self.original_event)
+            self.edit_time.setValue(self.event.time)
+            result = func(self, *args, **kwargs)
+            return result
+        return wrapper
+
+    def resetValues(self):
+        self.edit_time.setValue(self.event.time)
+
+    def addFrame(self, name) -> QHBoxLayout | None:
+        if self.items.get(name):
+            return None
+        frame = QFrame()
+        frame.setFixedHeight(30)
+        frame.setStyleSheet(f"*{{background: rgb{TABLE[self.event.type](0, 150)}; border-radius: 5px}}"
+                            f"QSpinBox, QDoubleSpinBox{{ background: rgb{TABLE[self.event.type](0, 125)}; padding: 0px; margin: 0px;}}")
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(5, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        frame.setLayout(layout)
+
+        self.items.update({name: frame})
+        return layout
+
+    def addTitle(self, text, name) -> QLabel | None:
+        if self.items.get(name):
+            return None
+        title = QLabel(text)
+        title.setFixedHeight(30)
+        title.setStyleSheet("font-size: 20px")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.items.update({name: title})
+        return title
+
+    def addButton(self, text, name) -> QPushButton | None:
+        if self.items.get(name):
+            return None
+        button = QPushButton(text)
+        button.setFixedHeight(30)
+        button.setStyleSheet(f"""
+                                QPushButton{{ background: rgb{TABLE[self.event.type](0, 170)}; border-radius: 5px }} 
+                                QPushButton:hover{{ background: rgb{TABLE[self.event.type](0, 100)}; }}
+                            """)
+        self.items.update({name: button})
+        return button
+
+    def load(self):
+        for name, value in self.items.items():
+            self.parent.add(value, name)
+
+    @updateValue
+    def setTime(self, value):
+        self.event.time = value
+
+class ConfigClickItem(ConfigItem[EventClick]):
+    _type = EventClick
+    def __init__(self, parent: QScroll, event: EventClick):
+        super().__init__(parent, event)
+
+        # Margins
+        self.addTitle("Marges", 'margins title')
+        frame_margins = self.addFrame("margins")
+        self.margin_left = CompactSpinBox(prefix="gauche: ", minimum=0, maximum=9999, singleStep=1, value=self.event.pos.margins[0])
+        self.margin_right = CompactSpinBox(prefix="droite: ", minimum=0, maximum=9999, singleStep=1, value=self.event.pos.margins[1])
+        self.margin_top = CompactSpinBox(prefix="haut: ", minimum=0, maximum=9999, singleStep=1, value=self.event.pos.margins[2])
+        self.margin_bottom = CompactSpinBox(prefix="bas: ", minimum=0, maximum=9999, singleStep=1, value=self.event.pos.margins[3])
+        self.margin_left.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.margin_right.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.margin_top.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.margin_bottom.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+
+        self.margin_left.valueChanged.connect(lambda value: self.setMargins(0, value))
+        self.margin_right.valueChanged.connect(lambda value: self.setMargins(1, value))
+        self.margin_top.valueChanged.connect(lambda value: self.setMargins(2, value))
+        self.margin_bottom.valueChanged.connect(lambda value: self.setMargins(3, value))
+
+        frame_margins.addWidget(self.margin_left)
+        frame_margins.addWidget(self.margin_right)
+        frame_margins.addWidget(self.margin_top)
+        frame_margins.addWidget(self.margin_bottom)
+
+        # Position
+        self.addTitle("Position", "position title")
+        frame_pos_x = self.addFrame("position x")
+        self.label_pos_x = QLabel("X: ")
+        self.edit_pos_x_width = CompactDoubleSpinBox(prefix="largeur: ", suffix="%", minimum=-100, maximum=100, singleStep=0.01)
+        self.edit_pos_x_height = CompactDoubleSpinBox(prefix="hauteur: ", suffix="%", minimum=-100, maximum=100, singleStep=0.01)
+        self.edit_pos_x_value = CompactSpinBox(prefix="ajout: ", suffix="px", minimum=-9999, maximum=9999, singleStep=1)
+        frame_pos_y = self.addFrame("position y")
+        self.label_pos_y = QLabel("Y: ")
+        self.edit_pos_y_width = CompactDoubleSpinBox(prefix="largeur: ", suffix="%", minimum=-100, maximum=100, singleStep=0.01)
+        self.edit_pos_y_height= CompactDoubleSpinBox(prefix="hauteur: ", suffix="%", minimum=-100, maximum=100, singleStep=0.01)
+        self.edit_pos_y_value = CompactSpinBox(prefix="ajout: ", suffix="px", minimum=-9999, maximum=9999, singleStep=1)
+
+        self.edit_pos_x_width.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.edit_pos_x_height.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.edit_pos_x_value.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.edit_pos_y_width.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.edit_pos_y_height.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.edit_pos_y_value.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+
+        self.edit_pos_x_width.roundedValueChanged.connect(self.setPosXWidth)
+        self.edit_pos_x_height.roundedValueChanged.connect(self.setPosXHeight)
+        self.edit_pos_x_value.valueChanged.connect(self.setPosXValue)
+
+        self.edit_pos_y_width.roundedValueChanged.connect(self.setPosYWidth)
+        self.edit_pos_y_height.roundedValueChanged.connect(self.setPosYHeight)
+        self.edit_pos_y_value.valueChanged.connect(self.setPosYValue)
+
+        frame_pos_x.addWidget(self.label_pos_x)
+        frame_pos_x.addWidget(self.edit_pos_x_width)
+        frame_pos_x.addWidget(self.edit_pos_x_height)
+        frame_pos_x.addWidget(self.edit_pos_x_value)
+
+        frame_pos_y.addWidget(self.label_pos_y)
+        frame_pos_y.addWidget(self.edit_pos_y_width)
+        frame_pos_y.addWidget(self.edit_pos_y_height)
+        frame_pos_y.addWidget(self.edit_pos_y_value)
+
+    @ConfigItem.resetValue
+    def resetValues(self):
+        self.margin_left.setValue(self.event.pos.margins[0])
+        self.margin_right.setValue(self.event.pos.margins[1])
+        self.margin_top.setValue(self.event.pos.margins[2])
+        self.margin_bottom.setValue(self.event.pos.margins[3])
+
+        self.edit_pos_x_width.setValue(self.event.pos.x_pourcent_width)
+        self.edit_pos_x_height.setValue(self.event.pos.x_pourcent_height)
+        self.edit_pos_x_value.setValue(self.event.pos.x_value)
+        self.edit_pos_y_width.setValue(self.event.pos.y_pourcent_width)
+        self.edit_pos_y_height.setValue(self.event.pos.y_pourcent_height)
+        self.edit_pos_y_value.setValue(self.event.pos.y_value)
+
+    @ConfigItem.updateValue
+    def setMargins(self, index, value):
+        self.event.pos.margins[index] = value
+
+    @ConfigItem.updateValue
+    def setPosXWidth(self, value):
+        self.event.pos.x_pourcent_width = value
+
+    @ConfigItem.updateValue
+    def setPosXHeight(self, value):
+        self.event.pos.x_pourcent_height = value
+
+    @ConfigItem.updateValue
+    def setPosXValue(self, value):
+        self.event.pos.x_value = value
+
+    @ConfigItem.updateValue
+    def setPosYWidth(self, value):
+        self.event.pos.y_pourcent_width = value
+
+    @ConfigItem.updateValue
+    def setPosYHeight(self, value):
+        self.event.pos.y_pourcent_height = value
+
+    @ConfigItem.updateValue
+    def setPosYValue(self, value):
+        self.event.pos.y_value = value
+
+class ConfigKeyItem(ConfigItem[EventKey]):
+    _type = EventKey
+    def __init__(self, parent: QScroll, event: EventKey):
+        super().__init__(parent, event)
+
+        frame_key = self.addFrame("key")
+        self.label_key = QLabel("Touche: ")
+        self.edit_key = QBindKeyButton()
+        self.edit_key.changed.connect(self.setKey)
+        frame_key.addWidget(self.label_key)
+        frame_key.addWidget(self.edit_key)
+
+    @ConfigItem.resetValue
+    def resetValues(self):
+        self.edit_key.setValue(self.event.key)
+
+    @ConfigItem.updateValue
+    def setKey(self, value):
+        self.event.key = value
+
+class ConfigKeyReleaseItem(ConfigItem[EventKeyRelease]):
+    _type = EventKeyRelease
+    def __init__(self, parent: QScroll, event: EventKeyRelease):
+        super().__init__(parent, event)
+        frame_key = self.addFrame("key")
+        self.label_key = QLabel("Touche: ")
+        self.edit_key = QBindKeyButton()
+        self.edit_key.changed.connect(self.setKey)
+        frame_key.addWidget(self.label_key)
+        frame_key.addWidget(self.edit_key)
+
+    @ConfigItem.resetValue
+    def resetValues(self):
+        self.edit_key.setValue(self.event.key)
+
+    @ConfigItem.updateValue
+    def setKey(self, value):
+        self.event.key = value
+
+class ConfigLaunchItem(ConfigItem[EventLaunch]):
+    _type = EventLaunch
+    def __init__(self, parent: QScroll, event: EventLaunch):
+        super().__init__(parent, event)
+
+        frame_categorie = self.addFrame("categorie")
+        self.label_categorie = QLabel("Catégorie: ")
+        self.edit_categorie = QComboBox()
+        self.edit_categorie.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px; padding: 0 0 0 5px")
+        categories = database_manager.getCategories()[1]
+        self.edit_categorie.addItems([f"[{categorie[0]}] {categorie[1]}" for categorie in categories])
+
+        frame_categorie.addWidget(self.label_categorie)
+        frame_categorie.addWidget(self.edit_categorie)
+
+        frame_name = self.addFrame("name")
+
+        self.label_name = QLabel("Nom: ")
+
+        self.edit_name = QComboBox()
+        self.edit_name.setStyleSheet(
+            f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px; padding: 0 0 0 5px")
+        self.edit_name.addItems(
+            [f"[{macro[0]}] {macro[1]}" for macro in database_manager.getMacroOfCategorie(categories[0][0])[1]])
+
+        self.edit_categorie.currentTextChanged.connect(lambda text: [self.edit_name.clear(), self.edit_name.addItems(
+            [f"[{macro[0]}] {macro[1]}" for macro in
+             database_manager.getMacroOfCategorie(text[1:text.index(']')])[1]])])
+        self.edit_name.currentTextChanged.connect(lambda text: self.setMacro(int(text[1:text.index("]")]) if text else None))
+
+        frame_name.addWidget(self.label_name)
+        frame_name.addWidget(self.edit_name)
+
+    @ConfigItem.resetValue
+    def resetValues(self):
+        macro = database_manager.getInfoOfMacro(self.event.macro)[1][0]
+        categ_name = macro[4]
+        macro_name = macro[1]
+        self.edit_categorie.setCurrentText(f"[{macro[3]}] {categ_name}")
+        self.edit_name.setCurrentText(f'[{macro[0]}] {macro_name}')
+
+    @ConfigItem.updateValue
+    def setMacro(self, value):
+        self.event.macro = value
+
+
+class EventItem(QWidget, Generic[T]):
+
+    _type = None
+    def __new__(cls, event: T):
+        if cls != EventItem:
+            return object.__new__(cls)
+
+        event_type = type(event)
+        for sub in cls.__subclasses__():
+            if sub._type == event_type:
+                o = QWidget.__new__(sub)
+                return o
+        return QWidget.__new__(cls)
+
+    def __init__(self, event: T):
         super().__init__()
-
-        self.event_original = event
         self.event_value = event
         self.setFixedHeight(30)
 
-        self.save_callbakc = lambda: None
+        self.save_callback = lambda: None
 
         self.hbox = QHBoxLayout()
         self.hbox.setContentsMargins(0, 0, 0, 0)
 
         self.main_frame = QFrame(self)
+        self.main_frame.setStyleSheet(f"*{{background: rgb{TABLE[event.type](20, 200)}; border-radius: 5px }}")
+
         self.frame_btn = QFrame(self)
-
-        self.main_frame.setStyleSheet(f"background: rgb{TABLE[event.type](20, 200)}; border-radius: 5px ")
-
-
+        self.frame_btn.setMaximumWidth(90)
         self.frame_btn.setStyleSheet("QFrame { background: rgb(50, 50, 50); border-radius: 5px }")
 
-        self.label_event = QLabel(event.__str__(), self.main_frame)
-        self.label_event.setGeometry(5, 0, 300, 30)
+        self.main_frame_vbox = QVBoxLayout()
+        self.main_frame_vbox.setContentsMargins(5, 0, 5, 5)
+        self.main_frame_vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.config_area = QScroll(self.main_frame)
-        self.config_area.setGeometry(5, 35, 300, 250)
+        self.main_frame.setLayout(self.main_frame_vbox)
+
+        self.label_event = QLineEdit(event.__str__(), self.main_frame)
+        self.label_event.setReadOnly(True)
+        self.label_event.setFixedHeight(30)
+
+        self.config_area = QScroll()
         self.config_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.config_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.config_area.vbox.setContentsMargins(0, 0, 0, 0)
+        self.config_area.hide()
+
+        self.main_frame_vbox.addWidget(self.label_event)
+        self.main_frame_vbox.addWidget(self.config_area)
 
         self.edit_btn = QPushButton("📝", self.frame_btn)
         self.edit_btn.setGeometry(0, 0, 30, 30)
@@ -67,19 +388,10 @@ class QEvent(QWidget):
 
         self.destroyed.connect(lambda: self.preDestroy())
 
-    def preDestroy(self):
-        if isinstance(self.event_value, EventClick):
-            self.event_value.pos.stopUpdateMarges()
-            self.event_value.pos.stopUpdatePoint()
-            self.event_value.pos.remove_preview()
+        self.config_item = ConfigItem(self.config_area, self.event_value)
 
-    @staticmethod
-    def updateValue(func):
-        def wrapper(self: QEvent, *args, **kwargs):
-            result =  func(self, *args, **kwargs)
-            self.save_btn.setDisabled(self.event_value.jsonify() == self.event_original.jsonify())
-            return result
-        return wrapper
+    def preDestroy(self):
+        pass
 
     def setEditCallback(self, func):
         self.edit_btn.clicked.connect(func)
@@ -91,289 +403,43 @@ class QEvent(QWidget):
         self.add_btn.clicked.connect(func)
 
     def setSaveCallback(self, func):
-        self.save_callbakc = func
-
+        self.save_callback = func
+        save_button: QPushButton = self.config_item.items.get("save")
+        if save_button:
+            save_button.clicked.connect(func)
+            return T
+        else:
+            return None
     def removeEditMode(self):
         self.setFixedHeight(30)
         self.config_area.clear()
-        if self.event_value.type == "click":
-            assert isinstance(self.event_value, EventClick)
-            self.event_value.pos.stopUpdatePoint()
-            self.event_value.pos.stopUpdateMarges()
-            self.event_value.pos.remove_preview()
+        self.config_area.hide()
 
     def setEditMode(self):
-        self.event_value = copy.deepcopy(self.event_original)
-        self.setFixedHeight(300)
+        self.config_area.show()
 
-        frame_time = QFrame()
-        frame_time.setFixedHeight(30)
-        frame_time.setStyleSheet(f"background: rgb{TABLE[self.event_value.type](0, 150)}; border-radius: 5px ")
+        self.config_item = ConfigItem(self.config_area, self.event_value)
+        save_button: QPushButton = self.config_item.items.get("save")
+        if save_button:
+            save_button.clicked.connect(self.save_callback)
+        self.config_item.load()
 
-        label_time = QLabel("Temps:", frame_time)
-        time = QDoubleSpinBox(frame_time)
-        time.setRange(0, 9999)
-        time.setSingleStep(0.01)
-        time.setValue(self.event_value.time)
-        time.valueChanged.connect(self.setTime)
+        self.setFixedHeight(len(self.config_area.items)*36 + 36)
 
-        label_time.setGeometry(5, 0, 50, 30)
-        time.setGeometry(55, 0, 90, 30)
-        self.config_area.add(frame_time, "time")
+class EventClickItem(EventItem[EventClick]):
+    _type = EventClick
+    def __init__(self, event):
+        super().__init__(event)
 
-        self.reset_btn = QPushButton("Reset")
-        self.reset_btn.setFixedHeight(30)
-        self.reset_btn.clicked.connect(self.reset_value)
-        self.reset_btn.setStyleSheet(f"""
-                                QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
-                                QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
-                            """)
+    def removeEditMode(self):
+        super().removeEditMode()
+        self.event_value.pos.stopUpdatePoint()
+        self.event_value.pos.stopUpdateMarges()
 
-        self.save_btn = QPushButton("Save")
-        self.save_btn.setFixedHeight(30)
-        self.save_btn.clicked.connect(self.save_callbakc)
-        self.save_btn.setDisabled(True)
-        self.save_btn.setStyleSheet(f"""
-                                QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
-                                QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
-                            """)
-
-        if self.event_value.type == "click":
-            assert isinstance(self.event_value, EventClick)
-            frame_pos_margins = QFrame()
-            frame_pos_margins.setFixedHeight(30)
-            frame_pos_margins.setStyleSheet(f"background: rgb{TABLE[self.event_value.type](0, 150)}; border-radius: 5px ")
-
-            label_frame_pos_margins = QLabel("Margins:", frame_pos_margins)
-            # Position X Start
-            pos_margins_x_start = QSpinBox(frame_pos_margins)
-            pos_margins_x_start.setRange(0, 1000)
-            pos_margins_x_start.setValue(self.event_value.pos.margins[0])
-            pos_margins_x_start.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            # Position X End
-            pos_margins_x_end = QSpinBox(frame_pos_margins)
-            pos_margins_x_end.setRange(0, 1000)
-            pos_margins_x_end.setValue(self.event_value.pos.margins[1])
-            pos_margins_x_end.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            # Position Y Start
-            pos_margins_y_start = QSpinBox(frame_pos_margins)
-            pos_margins_y_start.setRange(0, 1000)
-            pos_margins_y_start.setValue(self.event_value.pos.margins[2])
-            pos_margins_y_start.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            # Position Y End
-            pos_margins_y_end = QSpinBox(frame_pos_margins)
-            pos_margins_y_end.setRange(0, 1000)
-            pos_margins_y_end.setValue(self.event_value.pos.margins[3])
-            pos_margins_y_end.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            view_margin = QCheckBox("Voir les marges", frame_pos_margins)
-
-            pos_margins_x_start.valueChanged.connect(lambda value: self.setMargins(0, value))
-            pos_margins_x_end.valueChanged.connect(lambda value: self.setMargins(1, value))
-            pos_margins_y_start.valueChanged.connect(lambda value: self.setMargins(2, value))
-            pos_margins_y_end.valueChanged.connect(lambda value: self.setMargins(3, value))
-            view_margin.stateChanged.connect(self.setViewMargin)
-
-            label_frame_pos_margins.setGeometry(5, 0, 30, 30)
-            pos_margins_x_start.setGeometry(40, 0, 30, 30)
-            pos_margins_x_end.setGeometry(75, 0, 30, 30)
-            pos_margins_y_start.setGeometry(110, 0, 30, 30)
-            pos_margins_y_end.setGeometry(145, 0, 30, 30)
-            view_margin.setGeometry(180, 0, 100, 30)
-
-            self.config_area.add(frame_pos_margins, "margins")
-
-            frame_pos_x = QFrame()
-            frame_pos_x.setFixedHeight(30)
-            frame_pos_x.setStyleSheet(f"background: rgb{TABLE[self.event_value.type](0, 150)}; border-radius: 5px ")
-
-            label_frame_pos_x = QLabel("Pos X:", frame_pos_x)
-            # Position X Pourcent Width
-            pos_x_pw = QDoubleSpinBox(frame_pos_x)
-            pos_x_pw.setRange(-100, 100)
-            pos_x_pw.setSingleStep(0.01)
-            pos_x_pw.setValue(self.event_value.pos.x_pourcent_width)
-            pos_x_pw.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            # Position X Pourcent Height
-            pos_x_ph = QDoubleSpinBox(frame_pos_x)
-            pos_x_ph.setRange(-100, 100)
-            pos_x_ph.setSingleStep(0.01)
-            pos_x_ph.setValue(self.event_value.pos.x_pourcent_height)
-            pos_x_ph.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            # Position X Value
-            pos_x = QSpinBox(frame_pos_x)
-            pos_x.setRange(-9999, 9999)
-            pos_x.setValue(self.event_value.pos.x_value)
-            pos_x.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            frame_pos_y = QFrame()
-            frame_pos_y.setFixedHeight(30)
-            frame_pos_y.setStyleSheet(f"background: rgb{TABLE[self.event_value.type](0, 150)}; border-radius: 5px ")
-
-            label_frame_pos_y = QLabel("Pos Y:", frame_pos_y)
-            # Position Y Pourcent Width
-            pos_y_pw = QDoubleSpinBox(frame_pos_y)
-            pos_y_pw.setRange(-100, 100)
-            pos_y_pw.setSingleStep(0.01)
-            pos_y_pw.setValue(self.event_value.pos.y_pourcent_width)
-            pos_y_pw.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            # Position Y Pourcent Height
-            pos_y_ph = QDoubleSpinBox(frame_pos_y)
-            pos_y_ph.setRange(-100, 100)
-            pos_y_ph.setValue(self.event_value.pos.y_pourcent_height)
-            pos_y_ph.setSingleStep(0.01)
-            pos_y_ph.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            # Position Y Value
-            pos_y = QSpinBox(frame_pos_y)
-            pos_y.setRange(-9999, 9999)
-            pos_y.setValue(self.event_value.pos.y_value)
-            pos_y.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-
-            label_frame_pos_x.setGeometry(5, 0, 30, 30)
-            pos_x_ph.setGeometry(55, 0, 50, 30)
-            pos_x_pw.setGeometry(110, 0, 50, 30)
-            pos_x.setGeometry(165, 0, 50, 30)
-
-            label_frame_pos_y.setGeometry(5, 0, 50, 30)
-            pos_y_ph.setGeometry(55, 0, 50, 30)
-            pos_y_pw.setGeometry(110, 0, 50, 30)
-            pos_y.setGeometry(165, 0, 50, 30)
-
-            if self.event_value.pos.windows_name is None:
-                pos_x_pw.setDisabled(True)
-                pos_y_pw.setDisabled(True)
-                pos_x_ph.setDisabled(True)
-                pos_y_ph.setDisabled(True)
-
-            pos_x.valueChanged.connect(self.setPositionX)
-            pos_y.valueChanged.connect(self.setPositionY)
-            pos_x_pw.valueChanged.connect(self.setPosXpw)
-            pos_y_pw.valueChanged.connect(self.setPosYpw)
-            pos_x_ph.valueChanged.connect(self.setPosXph)
-            pos_y_ph.valueChanged.connect(self.setPosYph)
-            self.config_area.add(frame_pos_x, "pos x")
-            self.config_area.add(frame_pos_y, "pos y")
-
-            frame_btn = QFrame()
-            frame_btn.setFixedHeight(30)
-            frame_btn.setStyleSheet(f"background: rgb{TABLE[self.event_value.type](0, 150)}; border-radius: 5px")
-
-            label_frame_btn = QLabel("Button:", frame_btn)
-            btn_combo = QComboBox(frame_btn)
-            btn_combo.addItems(("left", "right", "middle"))
-
-            label_frame_btn.setGeometry(5, 0, 50, 30)
-            btn_combo.setGeometry(55, 0, 150, 30)
-            btn_combo.currentTextChanged.connect(self.setBtn)
-            btn_combo.setCurrentText(self.event_value.btn)
-            self.config_area.add(frame_btn, "btn")
-
-            self.event_value.pos.startUpdatePoint()
-
-        if self.event_value.type == "key" or self.event_value.type == "key release":
-            assert isinstance(self.event_value, EventKey | EventKeyRelease)
-            frame_key = QFrame()
-            frame_key.setFixedHeight(30)
-            frame_key.setStyleSheet(f"background: rgb{TABLE[self.event_value.type](0, 150)}; border-radius: 5px ")
-
-            label_frame_key = QLabel("Touche:", frame_key)
-            self.key_selecteur = QPushButton(self.event_value.key.__str__(), frame_key)
-            self.key_selecteur.setStyleSheet(f"""
-                QPushButton{{ background: rgb{TABLE[self.event_value.type](0, 170)}; border-radius: 5px }} 
-                QPushButton:hover{{ background: rgb{TABLE[self.event_value.type](0, 100)}; }}
-            """)
-            self.key_selecteur.clicked.connect(self.setKey)
-
-            label_frame_key.setGeometry(5, 0, 50, 30)
-            self.key_selecteur.setGeometry(55, 5, 90, 20)
-            self.config_area.add(frame_key, "key")
-
-        self.config_area.add(self.reset_btn, "reset")
-        self.config_area.add(self.save_btn, "save")
-
-    @updateValue
-    def reset_value(self):
-        self.config_area.clear()
-        self.setEditMode()
-        if self.event_value.type == "click":
-            assert isinstance(self.event_value, EventClick)
-
-    @qasync.asyncSlot()
-    async def setKey(self):
-        self.key_selecteur.setText("...")
-        loop = asyncio.get_event_loop()
-        loop.run_in_executor(None, self.setKey2)
-
-    @updateValue
-    def setMargins(self, index, value):
-        assert isinstance(self.event_value, EventClick)
-        self.event_value.pos.margins[index] = value
-
-    def setViewMargin(self, value):
-        assert isinstance(self.event_value, EventClick)
-        print(value)
-        if value:
-            self.event_value.pos.startUpdateMarges()
-        else:
-            self.event_value.pos.stopUpdateMarges()
-
-
-    @updateValue
-    def setPositionX(self, value):
-        assert isinstance(self.event_value, EventClick)
-        self.event_value.pos.x_value = value
-
-    @updateValue
-    def setPositionY(self, value):
-        assert isinstance(self.event_value, EventClick)
-        self.event_value.pos.y_value = value
-
-    @updateValue
-    def setPosXpw(self, value):
-        assert isinstance(self.event_value, EventClick)
-        self.event_value.pos.x_pourcent_width = round(value, 2)
-
-    @updateValue
-    def setPosYpw(self, value):
-        assert isinstance(self.event_value, EventClick)
-        self.event_value.pos.y_pourcent_width = round(value, 2)
-
-    @updateValue
-    def setPosXph(self, value):
-        assert isinstance(self.event_value, EventClick)
-        self.event_value.pos.x_pourcent_height = round(value, 2)
-
-    @updateValue
-    def setPosYph(self, value):
-        assert isinstance(self.event_value, EventClick)
-        self.event_value.pos.y_pourcent_height = round(value, 2)
-
-    @updateValue
-    def setBtn(self, value):
-        assert isinstance(self.event_value, EventClick)
-        self.event_value.btn = value
-
-    @updateValue
-    def setTime(self, value):
-        self.event_value.time = round(value, 2)
-
-    @updateValue
-    def setKey2(self):
-        def getKey(key: Key | KeyCode | None):
-            assert isinstance(self.event_value, EventKey | EventKeyRelease)
-            self.key_selecteur.setText(key.__str__())
-            self.event_value.key = key
-            ls.stop()
-        ls = pynput.keyboard.Listener(on_press=getKey)
-        ls.start()
-        ls.join()
+    def preDestroy(self):
+        super().preDestroy()
+        self.event_value.pos.stopUpdateMarges()
+        self.event_value.pos.stopUpdatePoint()
 
 
 class QNowEvent(QFrame):

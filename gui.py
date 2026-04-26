@@ -1,39 +1,21 @@
 import asyncio
 import sys
-import time
 
 import qasync
-from PySide6.QtCore import QPoint
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QCheckBox, QComboBox, QWidget, QVBoxLayout, \
-    QLabel
+from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QCheckBox, QComboBox
 from qasync import QEventLoop, QApplication
 
-from Types.app_types import PosParams
-from VARS import database_manager
-from Types.GuiObjects.QCustomObjects import QEvent, QNowEvent
-from Types.Listerners.Event import ListEvent, Event, PosBase, EventClick, Pos
+from Types.GuiObjects.QCustomObjects import EventItem, QNowEvent
+from Types.GuiObjects.QObjects import QScrollCategorie, QScroll
+from Types.Listerners.Event import ListEvent, Event, PosBase, Pos
 from Types.Listerners.Listener import Listener
 from Types.Listerners.Simulator import Simulator
-from Types.GuiObjects.QObjects import QScrollCategorie, QScroll
-from windows.list_windows import get_taskbar_apps
+from Types.app_types import PosParams
+from VARS import database_manager
 from windows.list_monitors import list_monitors
-from windows.previewOverlay import Window, delete_border
-from windows.windows import get_windows_pos
+from windows.list_windows import get_taskbar_apps
 
-
-class AnotherWindow(QWidget):
-    """
-    This "window" is a QWidget. If it has no parent, it
-    will appear as a free-floating window as we want.
-    """
-
-    def __init__(self):
-        super().__init__()
-        layout = QVBoxLayout()
-        self.label = QLabel("Another Window")
-        layout.addWidget(self.label)
-        self.setLayout(layout)
 
 class MainWindows(QMainWindow):
     def __init__(self):
@@ -43,23 +25,28 @@ class MainWindows(QMainWindow):
         self.setGeometry(100, 100, 1100, 750)
         self.setFixedSize(1100, 750)
 
+        # Config
         self.pos_params = PosParams(False, PosBase.SCREEN, base_name=None, margins=(0, 0, 0, 0))
 
-        self.ls = Listener()
-
+        # Variable d'état
         self.macro = None
         self.categorie = None
         self.macro_edited = None
 
+        self.ls = Listener()
+        self.windows = None
+        self.apps = get_taskbar_apps()
+        self.monitors = list_monitors()
+
         ## Left Zone
         # Ligne 1
         self.launch_button = QPushButton("lancer la macro", self)
-        self.launch_button.clicked.connect(self.test3)
+        self.launch_button.clicked.connect(self.launchMacro)
         self.launch_button.setGeometry(10, 10, 300, 30)
 
         # Ligne 2
         self.button = QPushButton("Enregistrer", self)
-        self.button.clicked.connect(self.start_record)
+        self.button.clicked.connect(self.recordNewMacro)
         self.button.setGeometry(10, 45, 300, 30)
 
         # Ligne 2 col 1
@@ -100,7 +87,7 @@ class MainWindows(QMainWindow):
 
         # Ligne 4 col 2
         self.add_seq_btn = QPushButton("Ajout macro", self)
-        self.add_seq_btn.clicked.connect(self.addMacro)
+        self.add_seq_btn.clicked.connect(self.addNewBlankMacro)
         self.add_seq_btn.setGeometry(110, 115, 100, 30)
 
         self.separator_1 = QFrame(self)
@@ -115,9 +102,6 @@ class MainWindows(QMainWindow):
         self.base.addItems(PosBase.__members__.keys())
         self.base.setGeometry(10, 220, 100, 30)
 
-        self.apps = get_taskbar_apps()
-
-        self.monitors = list_monitors()
         monitors_names = self.get_monitors()
 
         self.base_name = QComboBox(self)
@@ -132,20 +116,20 @@ class MainWindows(QMainWindow):
         ## Middle Zone
         self.macros_scroll_area = QScrollCategorie(self)
         self.macros_scroll_area.setGeometry(325, 10, 275, 700)
-        self.loadScroll()
+        self.loadMacroScrollArea()
 
         # Right Zone
-        self.manage_macro = QScroll(self)
-        self.manage_macro.setGeometry(600, 10, 500, 700)
+        self.event_scroll_area = QScroll(self)
+        self.event_scroll_area.setGeometry(600, 10, 500, 700)
 
-        self.windows = None
-
-
+    # Arrête correctement les prévisualisations en cours
     def closeEvent(self, event: QCloseEvent):
-        qevent: QEvent = self.manage_macro.items.get(self.macro_edited)
-        qevent.removeEditMode()
+        qevent: EventItem = self.event_scroll_area.items.get(self.macro_edited)
+        if qevent:
+            qevent.removeEditMode()
         event.accept()
 
+    # Edit Config
     def setPosParamsIsRelative(self, value):
         self.pos_params.is_relative = value
 
@@ -165,12 +149,13 @@ class MainWindows(QMainWindow):
         self.monitors = list_monitors()
         return [x.get("Device") for x in self.monitors]
 
+    # Manage Categories
     def add_categ(self):
         name = self.add_categ_edit.text()
         categ_id = database_manager.addCategorie(name)[0]
 
         self.add_categ_edit.clear()
-        self.loadScroll()
+        self.loadMacroScrollArea()
         self.macros_scroll_area.setCurrentCateg(categ_id)
 
     def deleteCateg(self):
@@ -178,85 +163,19 @@ class MainWindows(QMainWindow):
         database_manager.deleteCategories(categ_id)
         self.macros_scroll_area.removeCateg(categ_id)
 
-    def loadScroll(self):
-        categories = database_manager.getCategories()[1]
-
-        for categ in categories:
-            categ_id, categ_name = categ
-            self.macros_scroll_area.addCateg(categ_id, categ_name)
-            self.macros_scroll_area.setCurrentCateg(categ_id)
-            self.macros_scroll_area.clear()
-
-            for macro in database_manager.getMacroOfCategorie(categ_id)[1]:
-                self.addItem((macro[0], macro[1]))
-
-        if categories:
-            self.macros_scroll_area.setCurrentCateg(categories[0][0])
-
-    def addItem(self, macro: tuple):
-        item = QFrame(self.macros_scroll_area)
-        item.setFixedHeight(25)
-        button = QPushButton(macro[1], item)
-        button.clicked.connect(lambda _, fi=macro[0]: self.setMacro(fi))
-        button.setGeometry(0, 0, 100, 27)
-
-        delete_button = QPushButton("🗑️", item)
-        delete_button.clicked.connect(lambda _, fi=macro[0]: self.deleteMacro(fi))
-        delete_button.setGeometry(120, 0, 100, 27)
-        self.macros_scroll_area.add(item, macro[0])
-
-    def setMacro(self, macro):
-        self.macro = macro
-        self.loadEditMacro()
-
-    def setCategorie(self, categorie):
-        self.categorie = categorie
-        self.loadEditMacro()
-
-    def addMacro(self):
+    # Manage Macros
+    def addNewBlankMacro(self):
         name = self.add_seq_edit.text()
         if self.macros_scroll_area.categSlc is None:
             return
-        macro_id = database_manager.addMacro(name, self.macros_scroll_area.categSlc)[0]
+        macro_id = database_manager.addNewBlankMacro(name, self.macros_scroll_area.categSlc)[0]
 
-        self.addItem((macro_id, name))
+        self.addMacroSrollAreaItem((macro_id, name))
         self.add_seq_edit.clear()
 
     def deleteMacro(self, macro):
         database_manager.deleteMacro(macro)
         self.macros_scroll_area.remove(macro)
-
-    @qasync.asyncSlot()
-    async def start_record(self):
-        self.button.setDisabled(True)
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self.start_record2)
-        self.button.setDisabled(False)
-
-    def start_record2(self):
-        self.ls.start(self.pos_params)
-        self.ls.join()
-        self.button.hide()
-        self.save_button.show()
-        self.name_save.show()
-        self.cancel_save.show()
-
-    @qasync.asyncSlot()
-    async def test3(self):
-        if not self.macro:
-            return
-        self.launch_button.setDisabled(True)
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self.test4)
-        self.launch_button.setDisabled(False)
-
-    def test4(self):
-        events = database_manager.getEventOfMacro(self.macro)[1]
-
-        events = ListEvent(events)
-
-        simulator = Simulator(events)
-        simulator.run()
 
     @qasync.asyncSlot()
     async def saveMacro(self):
@@ -269,7 +188,7 @@ class MainWindows(QMainWindow):
         self.name_save.hide()
         self.cancel_save.hide()
         macro_id = self.ls.save(text, self.macros_scroll_area.categSlc, database_manager)
-        self.addItem((macro_id, text))
+        self.addMacroSrollAreaItem((macro_id, text))
 
     @qasync.asyncSlot()
     async def cancelMacro(self):
@@ -279,51 +198,42 @@ class MainWindows(QMainWindow):
         self.name_save.hide()
         self.cancel_save.hide()
 
-    def loadEditMacro(self):
-        self.manage_macro.clear()
-        events: list[Event] = ListEvent(database_manager.getEventOfMacro(self.macro)[1])
-        button = QPushButton("➕")
-        button.setFixedHeight(30)
-        button.clicked.connect(lambda _: self.addEditedMacro(0, None, self.macro))
-        self.manage_macro.add(button, "buton")
+    # Set Etats
+    def setMacro(self, macro):
+        self.macro = macro
+        self.loadEventScrollArea()
 
-        for k, i in enumerate(events):
-            k += 1
-            item = QEvent(i)
-            item.setEditCallback(lambda _, fk=k: self.editMacro(fk))
-            item.setSaveCallback(lambda _, fi=item: self.saveEditedMacro(fi))
-            item.setAddCallback(lambda _, fk=k, fi=i.id: self.addEditedMacro(fk+1, fi, self.macro))
-            item.setDeleteCallback(lambda _, fi=i.id, fk=k: self.deleteEditedMacro(fi, fk))
+    def setCategorie(self, categorie):
+        self.categorie = categorie
+        self.loadEventScrollArea()
 
-            self.manage_macro.add(item, k)
-
-    def saveEditedMacro(self, qevent: QEvent):
-        _, time, data = qevent.event_value.jsonify()
-        if qevent.event_value.type == "click":
+    # Manage Events
+    def saveEditedEvent(self, qevent: EventItem):
+        _, time, data = qevent.config_item.event.jsonify()
+        if qevent.config_item.event.type == "click":
             _position: Pos = data.pop("pos")
             base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins = _position.jsonify()
-            print(margins, type(margins))
             database_manager.updatePosition(
-                qevent.event_value.id,
+                qevent.config_item.event.id,
                 {"x_value": x_value, "y_value": y_value,
                  "x_pourcent_width": x_pourcent_width, "y_pourcent_width": y_pourcent_width,
                  "x_pourcent_height": x_pourcent_height, "y_pourcent_height": y_pourcent_height, "margins": margins
                  })
-        database_manager.updateEvent(qevent.event_value.id, {"time": time, "data": data})
+        database_manager.updateEvent(qevent.config_item.event.id, {"time": time, "data": data})
         self.setMacro(self.macro)
         self.macro_edited = None
 
-    def deleteEditedMacro(self, _id, index: int):
+    def deleteEvent(self, _id, index: int):
         database_manager.deleteEvent(_id)
-        self.manage_macro.remove(index)
+        self.event_scroll_area.remove(index)
         self.setMacro(self.macro)
         self.macro_edited = None
 
-    def addEditedMacro(self, index: int, _id, macro_id):
+    def addEvent(self, index: int, _id, macro_id):
         item = QNowEvent()
         item.setSaveCallback(lambda event: self.saveEvent(_id, macro_id, event))
-        item.setCancelCallback(lambda: self.cancelAddEvent(item))
-        self.manage_macro.insert(index, item, "edit")
+        item.setCancelCallback(lambda: self.cancelAddEvent())
+        self.event_scroll_area.insert(index, item, "edit")
 
     def saveEvent(self, _id, macro_id, event: Event):
         e_type, e_time, data = event.jsonify()
@@ -331,14 +241,14 @@ class MainWindows(QMainWindow):
         database_manager.insertEvent(_id, e_type, e_time, data, macro_id)
         self.setMacro(self.macro)
 
-    def cancelAddEvent(self, item: QNowEvent):
-        self.manage_macro.remove("edit")
+    def cancelAddEvent(self):
+        self.event_scroll_area.remove("edit")
 
-    def editMacro(self, index):
-        old_qevent = self.manage_macro.items.get(self.macro_edited)
-        qevent: QEvent = self.manage_macro.items[index]
-        assert isinstance(old_qevent, QEvent | None)
-        assert isinstance(qevent, QEvent)
+    def editEvent(self, index):
+        old_qevent = self.event_scroll_area.items.get(self.macro_edited)
+        qevent: EventItem = self.event_scroll_area.items[index]
+        assert isinstance(old_qevent, EventItem | None)
+        assert isinstance(qevent, EventItem)
 
         if self.macro_edited == index:
             old_qevent.removeEditMode()
@@ -349,6 +259,85 @@ class MainWindows(QMainWindow):
 
         qevent.setEditMode()
         self.macro_edited = index
+
+    # Load Scroll AREA
+    def loadMacroScrollArea(self):
+        categories = database_manager.getCategories()[1]
+
+        for categ in categories:
+            categ_id, categ_name = categ
+            self.macros_scroll_area.addCateg(categ_id, categ_name)
+            self.macros_scroll_area.setCurrentCateg(categ_id)
+            self.macros_scroll_area.clear()
+
+            for macro in database_manager.getMacroOfCategorie(categ_id)[1]:
+                self.addMacroSrollAreaItem((macro[0], macro[1]))
+
+        if categories:
+            self.macros_scroll_area.setCurrentCateg(categories[0][0])
+
+    def addMacroSrollAreaItem(self, macro: tuple):
+        item = QFrame(self.macros_scroll_area)
+        item.setFixedHeight(25)
+        button = QPushButton(macro[1], item)
+        button.clicked.connect(lambda _, fi=macro[0]: self.setMacro(fi))
+        button.setGeometry(0, 0, 100, 27)
+
+        delete_button = QPushButton("🗑️", item)
+        delete_button.clicked.connect(lambda _, fi=macro[0]: self.deleteMacro(fi))
+        delete_button.setGeometry(120, 0, 100, 27)
+        self.macros_scroll_area.add(item, macro[0])
+
+    def loadEventScrollArea(self):
+        self.event_scroll_area.clear()
+        events: list[Event] = ListEvent(database_manager.getEventOfMacro(self.macro)[1])
+        button = QPushButton("➕")
+        button.setFixedHeight(30)
+        button.clicked.connect(lambda _: self.addEvent(0, None, self.macro))
+        self.event_scroll_area.add(button, "buton")
+
+        for k, i in enumerate(events):
+            k += 1
+            item = EventItem(i)
+            item.setEditCallback(lambda _, fk=k: self.editEvent(fk))
+            item.setSaveCallback(lambda _, fi=item: self.saveEditedEvent(fi))
+            item.setAddCallback(lambda _, fk=k, fi=i.id: self.addEvent(fk + 1, fi, self.macro))
+            item.setDeleteCallback(lambda _, fi=i.id, fk=k: self.deleteEvent(fi, fk))
+
+            self.event_scroll_area.add(item, k)
+
+    # Action Buttons
+    @qasync.asyncSlot()
+    async def recordNewMacro(self):
+        self.button.setDisabled(True)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.recordNewMacro2)
+        self.button.setDisabled(False)
+
+    def recordNewMacro2(self):
+        self.ls.start(self.pos_params)
+        self.ls.join()
+        self.button.hide()
+        self.save_button.show()
+        self.name_save.show()
+        self.cancel_save.show()
+
+    @qasync.asyncSlot()
+    async def launchMacro(self):
+        if not self.macro:
+            return
+        self.launch_button.setDisabled(True)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.launchMacro2)
+        self.launch_button.setDisabled(False)
+
+    def launchMacro2(self):
+        events = database_manager.getEventOfMacro(self.macro)[1]
+
+        events = ListEvent(events)
+
+        simulator = Simulator(events)
+        simulator.run()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

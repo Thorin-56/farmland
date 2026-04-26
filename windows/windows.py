@@ -1,7 +1,6 @@
 import ctypes
 from ctypes import wintypes
 
-import win32api
 import win32gui
 
 
@@ -18,7 +17,7 @@ def get_windows_pos(name):
             ctypes.byref(rect),
             ctypes.sizeof(rect)
         )
-        return (rect.left, rect.top, rect.right, rect.bottom)
+        return rect.left, rect.top, rect.right, rect.bottom
 
     # Test avec une fenêtre
     hwnd = win32gui.FindWindow(None, name)
@@ -26,12 +25,11 @@ def get_windows_pos(name):
     if hwnd:
         # Vérifier si la fenêtre est réduite (iconified)
         if win32gui.IsIconic(hwnd):
-            print("La fenêtre est réduite, les coordonnées ne sont pas valides.")
+            # print("La fenêtre est réduite, les coordonnées ne sont pas valides.")
             return None
         else:
-            rect = win32gui.GetWindowRect(hwnd)
             real_rect = get_true_window_rect(hwnd)
             return real_rect
     else:
-        print("Fenêtre non trouvée.")
+        # print("Fenêtre non trouvée.")
         return None

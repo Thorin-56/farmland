@@ -43,8 +43,8 @@ class Window(QMainWindow):
     def move(self, x, y):
         # Centrer la fenêtre
         screens = QApplication.screens()
+        ratio = None
         for screen in screens:
-            geom = screen.availableGeometry()
             ratio = screen.devicePixelRatio()
 
             screen2 = QApplication.screenAt(QPoint(x // ratio, y // ratio))

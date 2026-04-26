@@ -104,6 +104,9 @@ class DataManager:
     def getCategories(self) -> tuple[int, list]:
         return self.__execute__("SELECT * FROM categories", fetchall=True)
 
+    def getInfoOfMacro(self, macro_id) -> tuple[int, list]:
+        return self.__execute__("SELECT macros.*, categories.* FROM macros JOIN categories ON categorie=categories.id WHERE macros.id = ?", (macro_id, ), fetchone=True)
+
     def deleteMacro(self, macro_id) -> tuple[int]:
         return self.__execute__("DELETE FROM macros WHERE id = ?", (macro_id, ))
 
