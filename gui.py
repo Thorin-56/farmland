@@ -237,8 +237,10 @@ class MainWindows(QMainWindow):
 
     def saveEvent(self, _id, macro_id, event: Event):
         e_type, e_time, data = event.jsonify()
-        data = str(data)
-        database_manager.insertEvent(_id, e_type, e_time, data, macro_id)
+        position: Pos = data.pop("pos") if e_type == "click" else None
+        event_id = database_manager.insertEvent(_id, e_type, e_time, str(data), macro_id)[0]
+        if position:
+            database_manager.addPosition(*position.jsonify(), event_id)
         self.setMacro(self.macro)
 
     def cancelAddEvent(self):
@@ -340,6 +342,7 @@ class MainWindows(QMainWindow):
         simulator.run()
 
 if __name__ == '__main__':
+    sys.argv += ['-platform', 'windows:darkmode=2']
     app = QApplication(sys.argv)
 
     main_loop = QEventLoop(app)

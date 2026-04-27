@@ -1,16 +1,15 @@
 import datetime
-
-from PySide6.QtCore import QTimer
-from pynput.mouse import Button
-from pynput.keyboard import KeyCode, Key
-
-from VARS import TABLE_MOUSE, database_manager
 from enum import Enum
 
+from PySide6.QtCore import QTimer
+from pynput.keyboard import KeyCode, Key
+from pynput.mouse import Button
+
+from VARS import TABLE_MOUSE, database_manager
 from windows.list_monitors import list_monitors
 from windows.previewOverlay import Window, delete_border, WindowBorder
 from windows.windows import get_windows_pos
-from PySide6.QtWidgets import QMainWindow
+
 
 class PosBase(Enum):
     SCREEN = 1
@@ -18,19 +17,20 @@ class PosBase(Enum):
 
 
 class Pos:
-    def __init__(self, base=PosBase.SCREEN, windows_name=None, x_value=0, x_pourcent_height=0, x_pourcent_width=0, y_value=0, y_pourcent_height=0,
-                 y_pourcent_width=0, margins=(0, 0, 0, 0)):
+    def __init__(self, base=PosBase.SCREEN, windows_name=None, x_value=0, x_pourcent_height=0., x_pourcent_width=0.,
+                 y_value=0, y_pourcent_height=0.,
+                 y_pourcent_width=0., margins=(0, 0, 0, 0)):
         self.base: PosBase = base
         assert isinstance(self.base, PosBase) or self.base is None
 
         self.windows_name = windows_name if self.base is not None else None
 
-        self.x_pourcent_width = x_pourcent_width
-        self.x_pourcent_height = x_pourcent_height
+        self.x_pourcent_width = float(x_pourcent_width)
+        self.x_pourcent_height = float(x_pourcent_height)
         self.x_value = x_value
 
-        self.y_pourcent_width = y_pourcent_width
-        self.y_pourcent_height = y_pourcent_height
+        self.y_pourcent_width = float(y_pourcent_width)
+        self.y_pourcent_height = float(y_pourcent_height)
         self.y_value = y_value
 
         self.margins = list(margins)
@@ -39,7 +39,6 @@ class Pos:
         self.preview2: WindowBorder | None = None
         self.timer: QTimer | None = None
         self.timer2: QTimer | None = None
-
 
     def calcul(self, x, y, width, height):
         position_x = 0
@@ -110,8 +109,10 @@ class Pos:
             x, y = monitor_rect[:2]
             width, height = monitor_size
         if self.preview2:
-            if (self.preview2.x == x and self.preview2.y == y and self.preview2.width == width and self.preview2.height == height and
-                    [self.preview2.x_start, self.preview2.x_end, self.preview2.y_start, self.preview2.y_end] == self.margins):
+            if (
+                    self.preview2.x == x and self.preview2.y == y and self.preview2.width == width and self.preview2.height == height and
+                    [self.preview2.x_start, self.preview2.x_end, self.preview2.y_start,
+                     self.preview2.y_end] == self.margins):
                 return
             else:
                 self.preview2.deleteLater()
@@ -147,7 +148,7 @@ class Pos:
             width, height = monitor_size
 
         if self.preview:
-            if self.preview.x == x and self.preview.y == y and self.preview.window_size == d:
+            if self.preview.x == x and self.preview.y == y:
                 return
             else:
                 self.preview.move(*self.calcul(x, y, width, height))
@@ -171,16 +172,30 @@ class Pos:
             return f"{self.x_value}; {self.y_value}"
 
     def jsonify(self):
-        return self.base.name if self.base else None, self.windows_name, self.x_pourcent_width, self.x_pourcent_height, self.x_value, self.y_pourcent_width, self.y_pourcent_height, self.y_value, str(self.margins)
+        return self.base.name if self.base else None, self.windows_name, self.x_pourcent_width, self.x_pourcent_height, self.x_value, self.y_pourcent_width, self.y_pourcent_height, self.y_value, str(
+            self.margins)
 
     def __eq__(self, other):
         if isinstance(other, Pos):
-            return ((self.base.name if self.base else None, self.windows_name, self.x_pourcent_width, self.x_pourcent_height, self.x_value, self.y_pourcent_width, self.y_pourcent_height, self.y_value, self.margins) ==
-                    (other.base.name if other.base else None, other.windows_name, other.x_pourcent_width, other.x_pourcent_height, other.x_value, other.y_pourcent_width, other.y_pourcent_height, other.y_value, other.margins))
+            return ((self.base.name if self.base else None, self.windows_name, self.x_pourcent_width,
+                     self.x_pourcent_height, self.x_value, self.y_pourcent_width, self.y_pourcent_height, self.y_value,
+                     self.margins) ==
+                    (other.base.name if other.base else None, other.windows_name, other.x_pourcent_width,
+                     other.x_pourcent_height, other.x_value, other.y_pourcent_width, other.y_pourcent_height,
+                     other.y_value, other.margins))
         return False
 
+    def isValable(self):
+        return (type(self.x_value) == type(self.y_value) == int and
+                type(self.x_pourcent_width) == type(self.x_pourcent_height) == type(self.y_pourcent_width) == type(
+                    self.y_pourcent_height) == float and
+                type(self.margins) == list and len(self.margins) == 4 and all(
+                    [type(marge) == int for marge in self.margins]) and
+                (type(self.base) == PosBase or self.base is None) and isinstance(self.windows_name, str | None))
+
+
 class Event:
-    def __init__(self, _type, time=None, _id=None):
+    def __init__(self, _type, time=0., _id=None):
         self.id = _id
         self.type = _type
         self.time = time if time is not None else round(datetime.datetime.now().timestamp(), 2)
@@ -199,7 +214,7 @@ class Event:
 
 
 class EventKey(Event):
-    def __init__(self, key, time=None, _id=None):
+    def __init__(self, key, time=0., _id=None):
         super().__init__("key", time, _id)
         if key:
             if key[0] == "1":
@@ -222,8 +237,10 @@ class EventKey(Event):
         value = {}
         if isinstance(self.key, Key):
             value["key"] = f"0{self.key.name}"
-        else:
+        elif isinstance(self.key, KeyCode):
             value["key"] = f"1{self.key.vk}"
+        else:
+            value["key"] = self.key
         return self.type, self.time, value
 
     def isValable(self):
@@ -231,19 +248,29 @@ class EventKey(Event):
 
 
 class EventKeyRelease(EventKey):
-    def __init__(self, key, time=None, _id=None):
+    def __init__(self, key, time=0., _id=None):
         super().__init__(key, time, _id)
         self.type = "key release"
 
 
 class EventClick(Event):
-    def __init__(self, btn, pos, time=None, _id=None):
+    def __init__(self, btn, pos, time=0., _id=None):
         super().__init__("click", time, _id)
-        self.btn = btn
+        assert isinstance(btn, Button | None)
+        self.__btn: Button = btn
         self.pos: Pos = pos
 
+    @property
+    def btn(self):
+        return self.__btn
+
+    @btn.setter
+    def btn(self, value):
+        assert isinstance(value, Button | None)
+        self.__btn = value
+
     def __str__(self):
-        return f"[{self.time}] [{self.type}] Button: {self.btn} Pos: {self.pos}"
+        return f"[{self.time}] [{self.type}] Button: {self.btn.name} Pos: {self.pos}"
 
     def __eq__(self, other: EventClick):
         if type(other) != type(self):
@@ -251,10 +278,10 @@ class EventClick(Event):
         return (self.type, self.btn, self.pos) == (other.type, other.btn, other.pos)
 
     def jsonify(self):
-        return self.type, self.time, {"btn": self.btn, "pos": self.pos}
+        return self.type, self.time, {"btn": self.btn.name if self.btn else None, "pos": self.pos}
 
     def isValable(self):
-        return self.btn in TABLE_MOUSE.keys()
+        return isinstance(self.btn, Button) and self.pos.isValable()
 
 
 class EventMove(Event):
@@ -329,10 +356,12 @@ class ListEvent(list):
         final_events = []
         for event in events:
             (e_id, e_type, e_time, macro_id, data, pos_id, base, windows_name,
-             x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, event_id, margins) = event
-            if e_type == "click":
-              margins = eval(margins)
+             x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, event_id,
+             margins) = event
             data = eval(data)
+            if e_type == "click":
+                margins = eval(margins)
+                data["btn"] = TABLE_MOUSE[data.get("btn")]
             if base is not None:
                 base = PosBase[base]
             match e_type:

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import *
 
 from Types.GuiObjects.QObjects import CompactSpinBox, CompactDoubleSpinBox
 from Types.GuiObjects.QObjects import QScroll, QBindKeyButton, QBindMouseButton
-from Types.Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch
+from Types.Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch, Pos
 from VARS import database_manager
 
 TABLE = {
@@ -68,18 +68,17 @@ class ConfigItem(Generic[T], metaclass=Meta):
             result =  func(self, *args, **kwargs)
             save_button = self.items.get("save")
             if save_button:
-                save_button.setDisabled(self.original_event.jsonify() == self.event.jsonify())
+                save_button.setDisabled(self.original_event.jsonify() == self.event.jsonify() or not self.event.isValable())
             return result
         return wrapper
 
     @staticmethod
     def resetValue(func):
-        def wrapper(self: ConfigItem, *args, **kwargs):
+        def inner(self: ConfigItem, *args, **kwargs):
             self.event = copy.deepcopy(self.original_event)
             self.edit_time.setValue(self.event.time)
-            result = func(self, *args, **kwargs)
-            return result
-        return wrapper
+            return func(self, *args, **kwargs)
+        return ConfigItem.updateValue(inner)
 
     def resetValues(self):
         self.edit_time.setValue(self.event.time)
@@ -136,13 +135,22 @@ class ConfigClickItem(ConfigItem[EventClick]):
     def __init__(self, parent: QScroll, event: EventClick):
         super().__init__(parent, event)
 
+        # Button
+        frame_button = self.addFrame("button")
+        self.label_button = QLabel("Bouton: ")
+        self.edit_button = QBindMouseButton()
+        frame_button.addWidget(self.label_button)
+        frame_button.addWidget(self.edit_button)
+
+        self.edit_button.changed.connect(self.setButton)
+
         # Margins
         self.addTitle("Marges", 'margins title')
         frame_margins = self.addFrame("margins")
-        self.margin_left = CompactSpinBox(prefix="gauche: ", minimum=0, maximum=9999, singleStep=1, value=self.event.pos.margins[0])
-        self.margin_right = CompactSpinBox(prefix="droite: ", minimum=0, maximum=9999, singleStep=1, value=self.event.pos.margins[1])
-        self.margin_top = CompactSpinBox(prefix="haut: ", minimum=0, maximum=9999, singleStep=1, value=self.event.pos.margins[2])
-        self.margin_bottom = CompactSpinBox(prefix="bas: ", minimum=0, maximum=9999, singleStep=1, value=self.event.pos.margins[3])
+        self.margin_left = CompactSpinBox(prefix="gauche: ", minimum=0, maximum=9999, singleStep=1)
+        self.margin_right = CompactSpinBox(prefix="droite: ", minimum=0, maximum=9999, singleStep=1)
+        self.margin_top = CompactSpinBox(prefix="haut: ", minimum=0, maximum=9999, singleStep=1)
+        self.margin_bottom = CompactSpinBox(prefix="bas: ", minimum=0, maximum=9999, singleStep=1)
         self.margin_left.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.margin_right.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.margin_top.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
@@ -196,8 +204,20 @@ class ConfigClickItem(ConfigItem[EventClick]):
         frame_pos_y.addWidget(self.edit_pos_y_height)
         frame_pos_y.addWidget(self.edit_pos_y_value)
 
+        # Preview
+        frame_preview = self.addFrame("preview")
+        self.edit_preview_pos = QCheckBox("Voir la position")
+        self.edit_preview_margins = QCheckBox("Voir les marges")
+        frame_preview.addWidget(self.edit_preview_pos)
+        frame_preview.addWidget(self.edit_preview_margins)
+
+        self.edit_preview_pos.clicked.connect(self.setPreviewPos)
+        self.edit_preview_margins.clicked.connect(self.setPreviewMargins)
+
     @ConfigItem.resetValue
     def resetValues(self):
+        self.edit_button.setValue(self.event.btn)
+
         self.margin_left.setValue(self.event.pos.margins[0])
         self.margin_right.setValue(self.event.pos.margins[1])
         self.margin_top.setValue(self.event.pos.margins[2])
@@ -209,6 +229,22 @@ class ConfigClickItem(ConfigItem[EventClick]):
         self.edit_pos_y_width.setValue(self.event.pos.y_pourcent_width)
         self.edit_pos_y_height.setValue(self.event.pos.y_pourcent_height)
         self.edit_pos_y_value.setValue(self.event.pos.y_value)
+
+    def setPreviewPos(self, value):
+        if value:
+            self.event.pos.startUpdatePoint()
+        else:
+            self.event.pos.stopUpdatePoint()
+
+    def setPreviewMargins(self, value):
+        if value:
+            self.event.pos.startUpdateMarges()
+        else:
+            self.event.pos.stopUpdateMarges()
+
+    @ConfigItem.updateValue
+    def setButton(self, value):
+        self.event.btn = value
 
     @ConfigItem.updateValue
     def setMargins(self, index, value):
@@ -312,11 +348,17 @@ class ConfigLaunchItem(ConfigItem[EventLaunch]):
 
     @ConfigItem.resetValue
     def resetValues(self):
-        macro = database_manager.getInfoOfMacro(self.event.macro)[1][0]
-        categ_name = macro[4]
-        macro_name = macro[1]
-        self.edit_categorie.setCurrentText(f"[{macro[3]}] {categ_name}")
-        self.edit_name.setCurrentText(f'[{macro[0]}] {macro_name}')
+        macro = database_manager.getInfoOfMacro(self.event.macro)[1]
+        if macro:
+            macro = macro[0]
+            categ_name = macro[4]
+            macro_name = macro[1]
+            self.edit_categorie.setCurrentText(f"[{macro[3]}] {categ_name}")
+            self.edit_name.setCurrentText(f'[{macro[0]}] {macro_name}')
+        else:
+            self.edit_categorie.setCurrentIndex(0)
+            self.edit_name.setCurrentIndex(0)
+
 
     @ConfigItem.updateValue
     def setMacro(self, value):
@@ -433,24 +475,22 @@ class EventClickItem(EventItem[EventClick]):
 
     def removeEditMode(self):
         super().removeEditMode()
-        self.event_value.pos.stopUpdatePoint()
-        self.event_value.pos.stopUpdateMarges()
+        self.config_item.event.pos.stopUpdatePoint()
+        self.config_item.event.pos.stopUpdateMarges()
 
     def preDestroy(self):
         super().preDestroy()
-        self.event_value.pos.stopUpdateMarges()
-        self.event_value.pos.stopUpdatePoint()
+        self.config_item.event.pos.stopUpdateMarges()
+        self.config_item.event.pos.stopUpdatePoint()
 
 
 class QNowEvent(QFrame):
     save_btn: QPushButton
     def __init__(self):
         super().__init__()
-        self.setFixedHeight(275)
-
         self.setStyleSheet(f"background: rgb{TABLE["edit"](0, 150)}; border-radius: 5px")
 
-        self.current_event = EventLaunch("", "", 0.0)
+        self.current_event = EventLaunch("", 0.0)
 
         self.save_callback = None
         self.cancel_callback = None
@@ -468,14 +508,13 @@ class QNowEvent(QFrame):
         self.combo_type = QComboBox(self.frame_type)
         self.combo_type.addItems(("click", "key", "key release", "launch"))
         self.combo_type.setGeometry(110, 0, 100, 30)
-        self.combo_type.currentTextChanged.connect(self.typeChange)
+        self.combo_type.currentTextChanged.connect(self.setType)
 
         self.arg_vbox = QScroll()
         self.arg_vbox.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.arg_vbox.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        frame_categ: QFrame
-        label_categ: QLabel
+        self.config_item = ConfigItem(self.arg_vbox, self.current_event)
 
         self.vbox.addWidget(self.frame_type)
         self.vbox.addWidget(self.arg_vbox)
@@ -496,59 +535,33 @@ class QNowEvent(QFrame):
         self.arg_vbox.clear()
         self.setStyleSheet(f"background: rgb{TABLE[_type](25, 75)}; border-radius: 5px")
 
-        frame_time = QFrame()
-        frame_time.setFixedHeight(30)
-        frame_time.setStyleSheet(f"background: rgb{TABLE[_type](125, 125)}; border-radius: 5px")
-
-        label_time = QLabel("Time: ", frame_time)
-        label_time.setGeometry(5, 0, 100, 30)
-
-        edit_time = QDoubleSpinBox(frame_time)
-        edit_time.setRange(0, 99999)
-        edit_time.setSingleStep(0.01)
-        edit_time.setStyleSheet(f"background: rgb{TABLE[_type](50, 200)}; border-radius: 5px")
-        edit_time.setGeometry(110, 5, 100, 20)
-        edit_time.valueChanged.connect(self.setTime)
-
-        self.arg_vbox.add(frame_time, "time")
         match _type:
             case "launch":
-                self.current_event = EventLaunch(None, 0)
-                self.setTypeLaunch()
+                self.current_event = EventLaunch(None, 0.)
             case "key":
-                self.current_event = EventKey(None, 0)
-                self.setTypeKey()
+                self.current_event = EventKey(None, 0.)
             case "key release":
-                self.current_event = EventKeyRelease(None, 0)
-                self.setTypeKeyRelease()
+                self.current_event = EventKeyRelease(None, 0.)
             case "click":
-                self.current_event = EventClick(None, [0, 0], 0)
-                self.setTypeClick()
+                self.current_event = EventClick(None, Pos(), 0.)
 
-        self.save_btn = QPushButton("Save")
-        self.save_btn.setFixedHeight(30)
-        self.save_btn.clicked.connect(self.save_event)
-        self.save_btn.setDisabled(not self.current_event.isValable())
-        self.save_btn.setStyleSheet(f" QPushButton {{background: rgb{TABLE[_type](0, 255)}; border-radius: 5px}} "
-                               f" QPushButton:hover {{ background: rgb{TABLE[_type](0, 200)}; }}")
-        self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.config_item = ConfigItem(self.arg_vbox, self.current_event)
+        cancel_button = self.config_item.addButton("Annuler", "cancel")
+        if cancel_button:
+            cancel_button.clicked.connect(self.cancel)
+        save_button: QPushButton | None = self.config_item.items.get("save")
+        if save_button:
+            save_button.clicked.connect(self.save_event)
+        self.config_item.load()
 
-        self.cancel_btn = QPushButton("Annuler")
-        self.cancel_btn.setFixedHeight(30)
-        self.cancel_btn.clicked.connect(self.cancel)
-        self.cancel_btn.setStyleSheet(f" QPushButton {{background: rgb{TABLE[_type](0, 255)}; border-radius: 5px}} "
-                               f" QPushButton:hover {{ background: rgb{TABLE[_type](0, 200)}; }}")
-        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        self.arg_vbox.add(self.save_btn, "save")
-        self.arg_vbox.add(self.cancel_btn, "cancel")
+        self.setFixedHeight(len(self.arg_vbox.items) * 36 + 60)
 
     def setSaveCallback(self, func):
         self.save_callback = func
 
     def save_event(self):
         if self.save_callback:
-            self.save_callback(self.current_event)
+            self.save_callback(self.config_item.event)
 
     def setCancelCallback(self, func):
         self.cancel_callback = func
@@ -556,165 +569,3 @@ class QNowEvent(QFrame):
     def cancel(self):
         if self.cancel_callback:
             self.cancel_callback()
-
-    def typeChange(self, index):
-        self.setType(index)
-
-    def setTypeLaunch(self):
-
-        frame_categ = QFrame()
-        frame_categ.setFixedHeight(30)
-        frame_categ.setStyleSheet(f"background: rgb{TABLE["edit"](125, 125)}; border-radius: 5px")
-
-        label_categ = QLabel("Categ: ", frame_categ)
-        label_categ.setGeometry(5, 0, 100, 30)
-
-        edit_categ = QComboBox(frame_categ)
-        edit_categ.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px")
-        edit_categ.setGeometry(110, 5, 100, 20)
-        categories = database_manager.getCategories()[1]
-        edit_categ.addItems([f"[{categorie[0]}] {categorie[1]}" for categorie in categories])
-
-        frame_name = QFrame()
-        frame_name.setFixedHeight(30)
-        frame_name.setStyleSheet(f"background: rgb{TABLE["edit"](125, 125)}; border-radius: 5px")
-
-        label_name = QLabel("Nom: ", frame_name)
-        label_name.setGeometry(5, 0, 100, 30)
-
-        edit_name = QComboBox(frame_name)
-        edit_name.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px")
-        edit_name.setGeometry(110, 5, 100, 20)
-        edit_name.addItems([f"[{macro[0]}] {macro[1]}" for macro in database_manager.getMacroOfCategorie(categories[0][0])[1]])
-
-        edit_categ.currentTextChanged.connect(lambda text: [edit_name.clear(), edit_name.addItems([f"[{macro[0]}] {macro[1]}" for macro in database_manager.getMacroOfCategorie(text[1:text.index(']')])[1] ])])
-        edit_name.currentTextChanged.connect(lambda text: self.setMacro( int(text[1:text.index(']')]) if text else None ))
-
-        edit_name.setCurrentIndex(-1)
-        edit_name.setCurrentIndex(0)
-
-        self.arg_vbox.add(frame_categ, "categ")
-        self.arg_vbox.add(frame_name, "name")
-
-
-    def setTypeKey(self):
-        frame_key = QFrame()
-        frame_key.setFixedHeight(30)
-        frame_key.setStyleSheet(f"background: rgb{TABLE["key"](125, 125)}; border-radius: 5px")
-
-        label_key = QLabel("Key: ", frame_key)
-        label_key.setGeometry(5, 0, 100, 30)
-
-        edit_key = QBindKeyButton(frame_key)
-        edit_key.setStyleSheet(f"background: rgb{TABLE["key"](50, 200)}; border-radius: 5px")
-        edit_key.setGeometry(110, 5, 100, 20)
-        edit_key.changed.connect(self.setKey)
-
-        self.arg_vbox.add(frame_key, "key")
-
-    def setTypeKeyRelease(self):
-        frame_key = QFrame()
-        frame_key.setFixedHeight(30)
-        frame_key.setStyleSheet(f"background: rgb{TABLE["key release"](125, 125)}; border-radius: 5px")
-
-        label_key = QLabel("Key: ", frame_key)
-        label_key.setGeometry(5, 0, 100, 30)
-
-        edit_key = QBindKeyButton(frame_key)
-        edit_key.setStyleSheet(f"background: rgb{TABLE["key release"](50, 200)}; border-radius: 5px")
-        edit_key.setGeometry(110, 5, 100, 20)
-        edit_key.changed.connect(self.setKey)
-
-        self.arg_vbox.add(frame_key, "key")
-
-    def setTypeClick(self):
-        frame_click = QFrame()
-        frame_click.setFixedHeight(30)
-        frame_click.setStyleSheet(f"background: rgb{TABLE["click"](125, 125)}; border-radius: 5px")
-
-        label_click = QLabel("Bouton: ", frame_click)
-        label_click.setGeometry(5, 0, 100, 30)
-
-        edit_click = QBindMouseButton(frame_click)
-        edit_click.setStyleSheet(f"background: rgb{TABLE["click"](50, 200)}; border-radius: 5px")
-        edit_click.setGeometry(110, 5, 100, 20)
-        edit_click.changed.connect(self.setBtn)
-
-        frame_pos_x = QFrame()
-        frame_pos_x.setFixedHeight(30)
-        frame_pos_x.setStyleSheet(f"background: rgb{TABLE["click"](125, 125)}; border-radius: 5px")
-
-        label_pos_x = QLabel("Position X: ", frame_pos_x)
-        label_pos_x.setGeometry(5, 0, 100, 30)
-
-        edit_pos_x = QSpinBox(frame_pos_x)
-        edit_pos_x.setRange(-9999, 9999)
-        edit_pos_x.setStyleSheet(f"background: rgb{TABLE["click"](50, 200)}; border-radius: 5px")
-        edit_pos_x.setGeometry(110, 5, 100, 20)
-        edit_pos_x.valueChanged.connect(self.setPosX)
-
-        frame_pos_y = QFrame()
-        frame_pos_y.setFixedHeight(30)
-        frame_pos_y.setStyleSheet(f"background: rgb{TABLE["click"](125, 125)}; border-radius: 5px")
-
-        label_pos_y = QLabel("Position Y: ", frame_pos_y)
-        label_pos_y.setGeometry(5, 0, 100, 30)
-
-        edit_pos_y = QSpinBox(frame_pos_y)
-        edit_pos_y.setRange(-9999, 9999)
-        edit_pos_y.setStyleSheet(f"background: rgb{TABLE["click"](50, 200)}; border-radius: 5px")
-        edit_pos_y.setGeometry(110, 5, 100, 20)
-        edit_pos_x.valueChanged.connect(self.setPosY)
-
-        self.arg_vbox.add(frame_click, "button")
-        self.arg_vbox.add(frame_pos_x, "pos_x")
-        self.arg_vbox.add(frame_pos_y, "pos_y")
-
-    @updateValue
-    def setBtn(self, value):
-        assert isinstance(self.current_event, EventClick)
-        self.current_event.btn = value.name
-
-    @updateValue
-    def setPosX(self, value):
-        assert isinstance(self.current_event, EventClick)
-        self.current_event.pos.x_value = value
-
-    @updateValue
-    def setPosY(self, value):
-        assert isinstance(self.current_event, EventClick)
-        self.current_event.pos.y_value = value
-
-    @updateValue
-    def setPosXpw(self, value):
-        assert isinstance(self.current_event, EventClick)
-        self.current_event.pos.x_pourcent_width = value
-
-    @updateValue
-    def setPosYpw(self, value):
-        assert isinstance(self.current_event, EventClick)
-        self.current_event.pos.y_pourcent_width = value
-
-    @updateValue
-    def setPosXph(self, value):
-        assert isinstance(self.current_event, EventClick)
-        self.current_event.pos.x_pourcent_height = value
-
-    @updateValue
-    def setPosYph(self, value):
-        assert isinstance(self.current_event, EventClick)
-        self.current_event.pos.y_pourcent_height = value
-
-    @updateValue
-    def setKey(self, value):
-        assert isinstance(self.current_event, EventKey)
-        self.current_event.key = value
-
-    @updateValue
-    def setTime(self, value):
-        self.current_event.time = round(value, 2)
-
-    @updateValue
-    def setMacro(self, value):
-        assert isinstance(self.current_event, EventLaunch)
-        self.current_event.macro = value

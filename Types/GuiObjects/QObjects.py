@@ -44,7 +44,6 @@ class QScroll(QScrollArea):
         self.vbox.addWidget(_object)
         self.items.update({name: _object})
 
-
     def insert(self, index, _object, name):
         if name in list(self.items.keys()):
             return
@@ -265,4 +264,12 @@ class QBindMouseButton(QPushButton):
     @property
     def btn(self):
         return self.__btn
+
+    @btn.setter
+    def btn(self, value):
+        self.__btn = value
+
+    def setValue(self, value):
+        self.btn = value
+        self.setText(str(value))
 

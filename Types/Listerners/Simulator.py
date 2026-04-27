@@ -43,7 +43,7 @@ class Simulator:
                         width, height = monitor_size
 
                     ConM().position = event.pos.calcul(x, y, width, height)
-                    ConM().click(TABLE_MOUSE[event.btn])
+                    ConM().click(event.btn)
                 case "time":
                     assert isinstance(event, EventSleep)
                     pass
