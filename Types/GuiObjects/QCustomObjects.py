@@ -1,11 +1,12 @@
 import copy
 from typing import Generic, TypeVar
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QVariantAnimation
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import *
 
-from Types.GuiObjects.QObjects import CompactSpinBox, CompactDoubleSpinBox
-from Types.GuiObjects.QObjects import QScroll, QBindKeyButton, QBindMouseButton
+from Types.GuiObjects.QObjects import CompactSpinBox, CompactDoubleSpinBox, BindKeyButton, BindMouseButton
+from Types.GuiObjects.QObjects import QScroll
 from Types.Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch, Pos
 from VARS import database_manager
 
@@ -68,7 +69,7 @@ class ConfigItem(Generic[T], metaclass=Meta):
             result =  func(self, *args, **kwargs)
             save_button = self.items.get("save")
             if save_button:
-                save_button.setDisabled(self.original_event.jsonify() == self.event.jsonify() or not self.event.isValable())
+                save_button.setDisabled(self.original_event == self.event or not self.event.isValable())
             return result
         return wrapper
 
@@ -138,7 +139,7 @@ class ConfigClickItem(ConfigItem[EventClick]):
         # Button
         frame_button = self.addFrame("button")
         self.label_button = QLabel("Bouton: ")
-        self.edit_button = QBindMouseButton()
+        self.edit_button = BindMouseButton()
         frame_button.addWidget(self.label_button)
         frame_button.addWidget(self.edit_button)
 
@@ -281,7 +282,7 @@ class ConfigKeyItem(ConfigItem[EventKey]):
 
         frame_key = self.addFrame("key")
         self.label_key = QLabel("Touche: ")
-        self.edit_key = QBindKeyButton()
+        self.edit_key = BindKeyButton()
         self.edit_key.changed.connect(self.setKey)
         frame_key.addWidget(self.label_key)
         frame_key.addWidget(self.edit_key)
@@ -300,7 +301,7 @@ class ConfigKeyReleaseItem(ConfigItem[EventKeyRelease]):
         super().__init__(parent, event)
         frame_key = self.addFrame("key")
         self.label_key = QLabel("Touche: ")
-        self.edit_key = QBindKeyButton()
+        self.edit_key = BindKeyButton()
         self.edit_key.changed.connect(self.setKey)
         frame_key.addWidget(self.label_key)
         frame_key.addWidget(self.edit_key)
@@ -381,7 +382,7 @@ class EventItem(QWidget, Generic[T]):
 
     def __init__(self, event: T):
         super().__init__()
-        self.event_value = event
+        self.event_value: Event = event
         self.setFixedHeight(30)
 
         self.save_callback = lambda: None
@@ -390,6 +391,7 @@ class EventItem(QWidget, Generic[T]):
         self.hbox.setContentsMargins(0, 0, 0, 0)
 
         self.main_frame = QFrame(self)
+        self.anim = None
         self.main_frame.setStyleSheet(f"*{{background: rgb{TABLE[event.type](20, 200)}; border-radius: 5px }}")
 
         self.frame_btn = QFrame(self)
@@ -433,7 +435,11 @@ class EventItem(QWidget, Generic[T]):
         self.config_item = ConfigItem(self.config_area, self.event_value)
 
     def preDestroy(self):
-        pass
+        try:
+            if self.anim:
+                self.anim.stop()
+        except RuntimeError:
+            pass
 
     def setEditCallback(self, func):
         self.edit_btn.clicked.connect(func)
@@ -467,6 +473,17 @@ class EventItem(QWidget, Generic[T]):
         self.config_item.load()
 
         self.setFixedHeight(len(self.config_area.items)*36 + 36)
+
+    def loadAnim(self):
+        self.anim = QVariantAnimation()
+        self.anim.setStartValue(0.)
+        self.anim.setEndValue(1.)
+        self.anim.setDuration(self.event_value.time*1000)
+        self.anim.valueChanged.connect(lambda color: self.main_frame.setStyleSheet(
+            f"*{{background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:{color} rgb{TABLE[self.event_value.type](200, 200)}, stop:{color + 0.01} rgb{TABLE[self.event_value.type](20, 200)}); border-radius: 5px }}"))
+        # self.anim.valueChanged.connect(lambda x: print(x))
+        self.anim.finished.connect(lambda: self.main_frame.setStyleSheet(f"*{{background: rgb{TABLE[self.event_value.type](20, 200)}; border-radius: 5px }}"))
+        self.anim.start()
 
 class EventClickItem(EventItem[EventClick]):
     _type = EventClick

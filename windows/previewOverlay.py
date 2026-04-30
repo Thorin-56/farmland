@@ -32,9 +32,6 @@ class Window(QMainWindow):
             if screen == screen2:
                 break
 
-        real_width = int(geom.width() * ratio)
-        real_height = int(geom.height() * ratio)
-
         self.move(int(x / ratio) - self.window_size // 2, int(y / ratio) - self.window_size //2)
 
         # Fenêtre complètement transparente

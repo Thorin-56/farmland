@@ -44,7 +44,7 @@ class ListM(SListM):
 
 class Listener:
     def __init__(self):
-        self.event = ListEvent()
+        self.events = ListEvent()
 
         self.params = None
         self.mouse = None
@@ -52,7 +52,7 @@ class Listener:
 
     def on_click(self, pos: Pos, button: Button, pressed: bool):
         if pressed:
-            self.event.append(EventClick(button.name, pos))
+            self.events.append(EventClick(button.name, pos))
 
     @staticmethod
     def on_move(x, y):
@@ -63,21 +63,21 @@ class Listener:
             self.stop()
             return
         if isinstance(key, Key):
-            self.event.append(EventKey(f"0{key.name}"))
+            self.events.append(EventKey(f"0{key.name}"))
         if isinstance(key, KeyCode):
-            self.event.append(EventKey(f"1{key.vk}"))
+            self.events.append(EventKey(f"1{key.vk}"))
 
     def on_release_key(self, key):
         if isinstance(key, Key):
-            self.event.append(EventKeyRelease(f"0{key.name}"))
+            self.events.append(EventKeyRelease(f"0{key.name}"))
         if isinstance(key, KeyCode):
-            self.event.append(EventKeyRelease(f"1{key.vk}"))
+            self.events.append(EventKeyRelease(f"1{key.vk}"))
 
     def start(self, params: PosParams = PosParams(False, "SCREEN", None, (0, 0, 0, ))):
         self.params = params
         self.mouse = ListM(on_click=self.on_click, on_move=self.on_move, params=self.params)
         self.key = ListK(on_press=self.on_key, on_release=self.on_release_key)
-        self.event.clear()
+        self.events.clear()
         self.key.start()
         self.mouse.start()
 
@@ -89,7 +89,7 @@ class Listener:
 
     def save(self, name, categorie, data_manager: DataManager):
         macro_id = data_manager.addMacro(name, categorie)[0]
-        for position, event in enumerate(self.event.jsonify()):
+        for position, event in enumerate(self.events.jsonify()):
             e_type, e_time, data = event
             _position = None
             if e_type == "click":

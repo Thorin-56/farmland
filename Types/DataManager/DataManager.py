@@ -4,7 +4,7 @@ import sqlite3
 class DataManager:
     def __init__(self):
         self.file = "point.db"
-        self.db = sqlite3.connect(self.file, check_same_thread=False)
+        self.db = sqlite3.connect(self.file)
         self.db.execute("PRAGMA foreign_keys = ON")
 
         self.__initFile__()
@@ -62,23 +62,23 @@ class DataManager:
                             );""")
         self.__execute__("""create table IF NOT EXISTS positions
                             (
-                                id                integer not null
+                                id                integer                     not null
                                     constraint Positions_pk
                                         primary key autoincrement
                                     constraint Positions_pk_2
                                         unique,
                                 base              TEXT,
                                 windows_name      TEXT,
-                                x_pourcent_width  INTEGER not null,
-                                x_pourcent_height INTEGER not null,
-                                x_value           INTEGER not null,
-                                y_pourcent_width  INTEGER not null,
-                                y_pourcent_height INTEGER not null,
-                                y_value           INTEGER not null,
+                                x_pourcent_width  INTEGER                     not null,
+                                x_pourcent_height INTEGER                     not null,
+                                x_value           INTEGER                     not null,
+                                y_pourcent_width  INTEGER                     not null,
+                                y_pourcent_height INTEGER                     not null,
+                                y_value           INTEGER                     not null,
                                 event_id          integer
                                     constraint positions_events_id_fk
                                         references events
-                                            on update cascade on delete cascade,
+                                        on update cascade on delete cascade,
                                 margins           TEXT default '[0, 0, 0, 0]' not null
                             );""")
 
@@ -86,54 +86,78 @@ class DataManager:
         return self.__execute__("INSERT INTO macros (name, categorie) VALUES (?, ?)", (name, categorie))
 
     def addEvent(self, e_type, time, data, macro_id, position) -> tuple[int]:
-        return self.__execute__("INSERT INTO events (type, time, macro_id, data, position) VALUES (?, ?, ?, ?, ?)", (e_type, time, macro_id, data, position))
+        return self.__execute__("INSERT INTO events (type, time, macro_id, data, position) VALUES (?, ?, ?, ?, ?)",
+                                (e_type, time, macro_id, data, position))
 
-    def addPosition(self, base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins, event_id) -> tuple[int]:
-        return self.__execute__("INSERT INTO positions (base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (base, windows_name,
-             x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins, event_id))
+    def addPosition(self, base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width,
+                    y_pourcent_height, y_value, margins, event_id) -> tuple[int]:
+        return self.__execute__(
+            "INSERT INTO positions (base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (base, windows_name,
+             x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins,
+             event_id))
 
     def addCategorie(self, name) -> tuple[int]:
-        return self.__execute__("INSERT INTO categories (name) VALUES (?)", (name, ))
+        return self.__execute__("INSERT INTO categories (name) VALUES (?)", (name,))
 
     def getMacroOfCategorie(self, categorie) -> tuple[int, list]:
-        return self.__execute__("SELECT * FROM macros JOIN categories ON categorie=categories.id WHERE categorie = ?", (categorie, ), fetchall=True)
+        return self.__execute__("SELECT * FROM macros JOIN categories ON categorie=categories.id WHERE categorie = ?",
+                                (categorie,), fetchall=True)
 
-    def getEventOfMacro(self, macro_id) -> tuple[int, list]:
-        return self.__execute__("SELECT events.id, type, time, macro_id, data, positions.* FROM events JOIN macros ON macro_id=macros.id LEFT JOIN positions ON events.id = positions.event_id WHERE macro_id = ? ORDER BY position", (macro_id, ), fetchall=True)
+    def getEventOfMacro(self, macro_id, start=0, end=-1) -> tuple[int, list]:
+        return self.__execute__(
+            f"SELECT events.id, type, time, macro_id, data, positions.* FROM events JOIN macros ON macro_id=macros.id LEFT JOIN positions ON events.id = positions.event_id WHERE macro_id = ? ORDER BY position LIMIT {start}, {end}",
+            (macro_id,), fetchall=True)
 
     def getCategories(self) -> tuple[int, list]:
         return self.__execute__("SELECT * FROM categories", fetchall=True)
 
     def getInfoOfMacro(self, macro_id) -> tuple[int, list]:
-        return self.__execute__("SELECT macros.*, categories.* FROM macros JOIN categories ON categorie=categories.id WHERE macros.id = ?", (macro_id, ), fetchone=True)
+        return self.__execute__(
+            "SELECT macros.*, categories.* FROM macros JOIN categories ON categorie=categories.id WHERE macros.id = ?",
+            (macro_id,), fetchone=True)
 
     def deleteMacro(self, macro_id) -> tuple[int]:
-        return self.__execute__("DELETE FROM macros WHERE id = ?", (macro_id, ))
+        return self.__execute__("DELETE FROM macros WHERE id = ?", (macro_id,))
 
     def deleteEvent(self, event_id) -> tuple[int]:
-        self.__execute__("DELETE FROM events WHERE id = ?", (event_id, ))
+        self.__execute__("DELETE FROM events WHERE id = ?", (event_id,))
 
     def deleteCategories(self, categorie_id) -> tuple[int, list]:
-        return self.__execute__("DELETE FROM categories WHERE id = ?", (categorie_id, ))
+        return self.__execute__("DELETE FROM categories WHERE id = ?", (categorie_id,))
 
     def updateMacro(self, macro_id, data: dict) -> tuple[int]:
-        return self.__execute__(f"UPDATE macros SET {", ".join([f"{key} = {value}" for key, value in data.items()])} WHERE id = ?", (macro_id, ))
+        return self.__execute__(
+            f"UPDATE macros SET {", ".join([f"{key} = {value}" for key, value in data.items()])} WHERE id = ?",
+            (macro_id,))
 
     def updateEvent(self, event_id, data: dict) -> tuple[int]:
-        return self.__execute__(f"UPDATE events SET {", ".join([f"{key} = {f"\"{value}\"" if key == "data" else value}" for key, value in data.items()])} WHERE id = ?", (event_id, ))
+        names = data.keys()
+        values = data.values()
+        return self.__execute__(
+            f"UPDATE events SET {", ".join([f"{key} = ?" for key in names])} WHERE id = ?",
+            (*values, event_id,))
+
 
     def updatePosition(self, event_id, data: dict) -> tuple[int]:
-        return self.__execute__(f"UPDATE positions SET {", ".join([f"{key} = {f'\'{value}\'' if isinstance(value, str) else value}" for key, value in data.items()])} WHERE event_id = ?", (event_id, ))
+        names = data.keys()
+        values = data.values()
+        return self.__execute__(
+            f"UPDATE positions SET {", ".join([f"{key} = ?" for key in names])} WHERE event_id = ?",
+            (*values, event_id,))
 
     def updateCategories(self, categorie_id, data: dict) -> tuple[int, list]:
-        return self.__execute__(f"UPDATE categories SET {", ".join([f"{key} = {value}" for key, value in data.items()])} WHERE id = ?", (categorie_id, ))
+        return self.__execute__(
+            f"UPDATE categories SET {", ".join([f"{key} = {value}" for key, value in data.items()])} WHERE id = ?",
+            (categorie_id,))
 
     def insertEvent(self, _id, e_type, time, data, macro_id):
         if _id is not None:
-            pos_1 = self.__execute__("SELECT position FROM events WHERE id = ?", (_id, ), fetchone=True)[1][0][0]
+            pos_1 = self.__execute__("SELECT position FROM events WHERE id = ?", (_id,), fetchone=True)[1][0][0]
         else:
             pos_1 = 1
-        pos_2 = self.__execute__("SELECT position FROM events WHERE position > ? AND macro_id = ?", (pos_1, macro_id), fetchone=True)[1]
+        pos_2 = self.__execute__("SELECT position FROM events WHERE position > ? AND macro_id = ?", (pos_1, macro_id),
+                                 fetchone=True)[1]
         if pos_2:
             pos_2 = pos_2[0][0]
         else:
@@ -142,7 +166,8 @@ class DataManager:
             position = pos_1 + ((pos_2 - pos_1) // 2)
         else:
             position = pos_1 + 1000
-        return self.__execute__("INSERT INTO events (type, time, macro_id, data, position) VALUES (?, ?, ?, ?, ?)", (e_type, time, macro_id, data, position))
+        return self.__execute__("INSERT INTO events (type, time, macro_id, data, position) VALUES (?, ?, ?, ?, ?)",
+                                (e_type, time, macro_id, data, position))
 
     def getMacro(self, _id):
-        return self.__execute__("SELECT * FROM macros WHERE id = ?", (_id, ), fetchone=True)
+        return self.__execute__("SELECT * FROM macros WHERE id = ?", (_id,), fetchone=True)

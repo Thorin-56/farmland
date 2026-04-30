@@ -1,8 +1,19 @@
-from pynput.mouse import Controller as ConM, Button, Listener as ListM
-from pynput.keyboard import Controller as ConK, Listener as ListK
+import asyncio
+import sys
 
-mouse = ConM()
-key = ConK()
+from qasync import QApplication, QEventLoop
 
-listener_mouse = ListM()
-listener_key = ListK()
+from gui import MainWindows
+
+if __name__ == '__main__':
+    sys.argv += ['-platform', 'windows:darkmode=2']
+    app = QApplication(sys.argv)
+
+    main_loop = QEventLoop(app)
+    asyncio.set_event_loop(main_loop)
+
+    windows = MainWindows()
+    windows.show()
+
+    with main_loop:
+        main_loop.run_forever()

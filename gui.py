@@ -1,14 +1,14 @@
 import asyncio
-import sys
+import secrets
 
 import qasync
+from PySide6.QtCore import Signal, QRect
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QCheckBox, QComboBox
-from qasync import QEventLoop, QApplication
+from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QCheckBox, QComboBox, QWidget
 
 from Types.GuiObjects.QCustomObjects import EventItem, QNowEvent
 from Types.GuiObjects.QObjects import QScrollCategorie, QScroll
-from Types.Listerners.Event import ListEvent, Event, PosBase, Pos
+from Types.Listerners.Event import ListEvent, Event, PosBase, Pos, EventClick
 from Types.Listerners.Listener import Listener
 from Types.Listerners.Simulator import Simulator
 from Types.app_types import PosParams
@@ -18,6 +18,10 @@ from windows.list_windows import get_taskbar_apps
 
 
 class MainWindows(QMainWindow):
+    _anim_signal = Signal(object)
+    _launch_anim_signal = Signal(object)
+    _preload_signal = Signal(object)
+    _preload_finish_signal = Signal(object)
     def __init__(self):
         super().__init__()
 
@@ -34,9 +38,15 @@ class MainWindows(QMainWindow):
         self.macro_edited = None
 
         self.ls = Listener()
+        self.simulator: Simulator | None = None
         self.windows = None
         self.apps = get_taskbar_apps()
         self.monitors = list_monitors()
+
+        self.loadEventScrollArea_uuid = None
+        self._anim_signal.connect(self.test)
+        self._launch_anim_signal.connect(self.change_event)
+        self._preload_signal.connect(self.preload_event_area)
 
         ## Left Zone
         # Ligne 1
@@ -119,14 +129,18 @@ class MainWindows(QMainWindow):
         self.loadMacroScrollArea()
 
         # Right Zone
+        self.base_geo = QRect(600, 10, 500, 700)
         self.event_scroll_area = QScroll(self)
-        self.event_scroll_area.setGeometry(600, 10, 500, 700)
+        self.event_scroll_area.setGeometry(self.base_geo)
+
+        self.pre_load__event_scroll_area = QScroll(self)
+        self.pre_load__event_scroll_area.hide()
 
     # Arrête correctement les prévisualisations en cours
     def closeEvent(self, event: QCloseEvent):
         qevent: EventItem = self.event_scroll_area.items.get(self.macro_edited)
-        if qevent:
-            qevent.removeEditMode()
+        if qevent: qevent.removeEditMode()
+        if self.simulator: self.simulator.stop()
         event.accept()
 
     # Edit Config
@@ -168,7 +182,7 @@ class MainWindows(QMainWindow):
         name = self.add_seq_edit.text()
         if self.macros_scroll_area.categSlc is None:
             return
-        macro_id = database_manager.addNewBlankMacro(name, self.macros_scroll_area.categSlc)[0]
+        macro_id = database_manager.addMacro(name, self.macros_scroll_area.categSlc)[0]
 
         self.addMacroSrollAreaItem((macro_id, name))
         self.add_seq_edit.clear()
@@ -199,20 +213,30 @@ class MainWindows(QMainWindow):
         self.cancel_save.hide()
 
     # Set Etats
-    def setMacro(self, macro):
+    @qasync.asyncSlot()
+    async def setMacro(self, macro):
         self.macro = macro
-        self.loadEventScrollArea()
+        await self.loadEventScrollArea()
 
-    def setCategorie(self, categorie):
+    @qasync.asyncSlot()
+    async def setCategorie(self, categorie):
         self.categorie = categorie
-        self.loadEventScrollArea()
+        await self.loadEventScrollArea()
 
     # Manage Events
+    async def adjusteScrollEditEvent(self, index, height):
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        value = (index + 1) * 36 + height - self.event_scroll_area.verticalScrollBar().value()
+        scroll_value = self.event_scroll_area.verticalScrollBar().value()
+        if value > self.event_scroll_area.height():
+            self.event_scroll_area.verticalScrollBar().setValue(
+                scroll_value + (value - self.event_scroll_area.height()))
+
     def saveEditedEvent(self, qevent: EventItem):
         _, time, data = qevent.config_item.event.jsonify()
         if qevent.config_item.event.type == "click":
-            _position: Pos = data.pop("pos")
-            base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins = _position.jsonify()
+            base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins = qevent.config_item.event.pos.jsonify()
             database_manager.updatePosition(
                 qevent.config_item.event.id,
                 {"x_value": x_value, "y_value": y_value,
@@ -223,22 +247,24 @@ class MainWindows(QMainWindow):
         self.setMacro(self.macro)
         self.macro_edited = None
 
-    def deleteEvent(self, _id, index: int):
+    def deleteEvent(self, _id):
         database_manager.deleteEvent(_id)
-        self.event_scroll_area.remove(index)
-        self.setMacro(self.macro)
+        self.event_scroll_area.remove(_id)
         self.macro_edited = None
 
-    def addEvent(self, index: int, _id, macro_id):
+    @qasync.asyncSlot()
+    async def addEvent(self, index: int, _id, macro_id):
         item = QNowEvent()
         item.setSaveCallback(lambda event: self.saveEvent(_id, macro_id, event))
         item.setCancelCallback(lambda: self.cancelAddEvent())
-        self.event_scroll_area.insert(index, item, "edit")
+        item_value = self.event_scroll_area.insert(index, item, "edit")
+        if item_value:
+            await self.adjusteScrollEditEvent(index, item.height())
 
     def saveEvent(self, _id, macro_id, event: Event):
         e_type, e_time, data = event.jsonify()
-        position: Pos = data.pop("pos") if e_type == "click" else None
-        event_id = database_manager.insertEvent(_id, e_type, e_time, str(data), macro_id)[0]
+        position: Pos = event.pos if isinstance(event, EventClick) else None
+        event_id = database_manager.insertEvent(_id, e_type, e_time, data, macro_id)[0]
         if position:
             database_manager.addPosition(*position.jsonify(), event_id)
         self.setMacro(self.macro)
@@ -246,13 +272,14 @@ class MainWindows(QMainWindow):
     def cancelAddEvent(self):
         self.event_scroll_area.remove("edit")
 
-    def editEvent(self, index):
+    @qasync.asyncSlot()
+    async def editEvent(self, event_id, index):
         old_qevent = self.event_scroll_area.items.get(self.macro_edited)
-        qevent: EventItem = self.event_scroll_area.items[index]
+        qevent: EventItem = self.event_scroll_area.items[event_id]
         assert isinstance(old_qevent, EventItem | None)
         assert isinstance(qevent, EventItem)
 
-        if self.macro_edited == index:
+        if self.macro_edited == event_id:
             old_qevent.removeEditMode()
             self.macro_edited = None
             return
@@ -260,7 +287,8 @@ class MainWindows(QMainWindow):
             old_qevent.removeEditMode()
 
         qevent.setEditMode()
-        self.macro_edited = index
+        await self.adjusteScrollEditEvent(index, qevent.height())
+        self.macro_edited = event_id
 
     # Load Scroll AREA
     def loadMacroScrollArea(self):
@@ -290,23 +318,56 @@ class MainWindows(QMainWindow):
         delete_button.setGeometry(120, 0, 100, 27)
         self.macros_scroll_area.add(item, macro[0])
 
-    def loadEventScrollArea(self):
+    @qasync.asyncSlot()
+    async def loadEventScrollArea(self):
         self.event_scroll_area.clear()
+        self.loadEventScrollArea_uuid = secrets.token_hex()
+        uuid = self.loadEventScrollArea_uuid
         events: list[Event] = ListEvent(database_manager.getEventOfMacro(self.macro)[1])
         button = QPushButton("➕")
         button.setFixedHeight(30)
         button.clicked.connect(lambda _: self.addEvent(0, None, self.macro))
-        self.event_scroll_area.add(button, "buton")
+        self.event_scroll_area.add(button, "button")
 
         for k, i in enumerate(events):
             k += 1
             item = EventItem(i)
-            item.setEditCallback(lambda _, fk=k: self.editEvent(fk))
+            item.setEditCallback(lambda _, fi=i.id, fk=k: self.editEvent(fi, fk))
             item.setSaveCallback(lambda _, fi=item: self.saveEditedEvent(fi))
             item.setAddCallback(lambda _, fk=k, fi=i.id: self.addEvent(fk + 1, fi, self.macro))
-            item.setDeleteCallback(lambda _, fi=i.id, fk=k: self.deleteEvent(fi, fk))
+            item.setDeleteCallback(lambda _, fi=i.id: self.deleteEvent(fi))
+            if self.loadEventScrollArea_uuid != uuid:
+                return
+            self.event_scroll_area.add(item, i.id)
+            await asyncio.sleep(0.0)
 
-            self.event_scroll_area.add(item, k)
+    @qasync.asyncSlot()
+    async def loadPreLoadEventScrollArea(self, macro_id):
+        self.pre_load__event_scroll_area.clear()
+        self.loadEventScrollArea_uuid = secrets.token_hex()
+        uuid = self.loadEventScrollArea_uuid
+        events: list[Event] = ListEvent(database_manager.getEventOfMacro(macro_id)[1])
+        button = QPushButton("➕")
+        button.setFixedHeight(30)
+        button.clicked.connect(lambda _: self.addEvent(0, None, macro_id))
+        self.pre_load__event_scroll_area.add(button, "button")
+
+        for k, i in enumerate(events):
+            k += 1
+            item = EventItem(i)
+            item.setEditCallback(lambda _, fi=i.id, fk=k: self.editEvent(fi, fk))
+            item.setSaveCallback(lambda _, fi=item: self.saveEditedEvent(fi))
+            item.setAddCallback(lambda _, fk=k, fi=i.id: self.addEvent(fk + 1, fi, macro_id))
+            item.setDeleteCallback(lambda _, fi=i.id: self.deleteEvent(fi))
+            if self.loadEventScrollArea_uuid != uuid:
+                return
+            self.pre_load__event_scroll_area.add(item, i.id)
+            await asyncio.sleep(0.0)
+        button_finish = QPushButton("➕")
+        button_finish.setFixedHeight(30)
+        button_finish.clicked.connect(lambda _: None)
+        self.pre_load__event_scroll_area.add(QWidget(), "finish")
+        self._preload_finish_signal.emit(macro_id)
 
     # Action Buttons
     @qasync.asyncSlot()
@@ -334,22 +395,36 @@ class MainWindows(QMainWindow):
         self.launch_button.setDisabled(False)
 
     def launchMacro2(self):
-        events = database_manager.getEventOfMacro(self.macro)[1]
+        self.event_scroll_area.verticalScrollBar().setDisabled(True)
+        self.simulator = Simulator(self.macro)
+        self.simulator.start_event = lambda x: [self._anim_signal.emit(x)]
+        self.simulator.enter_launch_event = lambda x: [self._launch_anim_signal.emit(x)]
+        self.simulator.preload_event = lambda x: [self._preload_signal.emit(x)]
+        self.simulator.run()
+        self.event_scroll_area.verticalScrollBar().setDisabled(False)
 
-        events = ListEvent(events)
+    def test(self, x):
+        a: EventItem = self.event_scroll_area.items.get(x)
+        if  a:
+            a.loadAnim()
+            self.event_scroll_area.verticalScrollBar().setValue(self.event_scroll_area.index(x)*36 - self.event_scroll_area.height()//2)
 
-        simulator = Simulator(events)
-        simulator.run()
+    def change_event(self, macro_id):
+        if self.macro != macro_id:
+            if self.pre_load__event_scroll_area.items.get("finish"):
+                self.change_event_finish(macro_id)
+            else:
+                self._preload_finish_signal.connect(self.change_event_finish)
 
-if __name__ == '__main__':
-    sys.argv += ['-platform', 'windows:darkmode=2']
-    app = QApplication(sys.argv)
+    def change_event_finish(self, macro_id):
+        last = self.event_scroll_area
+        self.event_scroll_area = self.pre_load__event_scroll_area
+        last.deleteLater()
+        self.event_scroll_area.setGeometry(self.base_geo)
+        self.event_scroll_area.show()
+        self.macro = macro_id
+        self.pre_load__event_scroll_area = QScroll(self)
+        self.pre_load__event_scroll_area.setGeometry(self.base_geo)
 
-    main_loop = QEventLoop(app)
-    asyncio.set_event_loop(main_loop)
-
-    windows = MainWindows()
-    windows.show()
-
-    with main_loop:
-        main_loop.run_forever()
+    def preload_event_area(self, macro_id):
+        self.loadPreLoadEventScrollArea(macro_id)

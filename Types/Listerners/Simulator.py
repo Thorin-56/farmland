@@ -1,54 +1,119 @@
-import time
-from VARS import TABLE_MOUSE, TABLE_KEY, database_manager
-from Types.Listerners.Event import ListEvent, EventKey, EventKeyRelease, EventClick, EventSleep, EventLaunch, PosBase
+import threading
+
+from pynput.keyboard import Controller as ConK, Listener as LsK, Key, KeyCode
 from pynput.mouse import Controller as ConM
-from pynput.keyboard import Controller as ConK
-from windows.list_monitors import list_monitors
-from windows.windows import get_windows_pos
+
+from Types.DataManager.DataManager import DataManager
+from Types.Listerners.Event import ListEvent, EventKey, EventKeyRelease, EventClick, EventSleep, EventLaunch, Event
+from VARS import TABLE_KEY, database_manager
 
 
 class Simulator:
-    def __init__(self, events: ListEvent):
-        self.events = events
+    def __init__(self, macro_id: int, parent: Simulator=False, macro_index=None):
+        self.macro_id = macro_id
+
+        self.database_manager = DataManager()
+        events = self.database_manager.getEventOfMacro(self.macro_id)[1]
+        self.events = ListEvent(events)
+
+        self._stop = threading.Event()
+        self.stop_key = Key.esc
+
+        self.parent = parent
+        self.is_sub = not not parent
+        self.index = macro_index
+
+        self.start_event = lambda _: None
+        self.enter_launch_event = lambda _: None
+        self.preload_event = lambda _: None
+        self.next_macro = None
+        self.last_event_verif = 0
+
+        self.ls = LsK(on_press=self.verifStop) if not parent else None
+        self.ConM = ConM()
+        self.ConK = ConK()
+
+        self.keys_pressed = set()
+        self.sub: Simulator | None = None
+
+    def verifStop(self, key: Key | KeyCode):
+        if key == self.stop_key:
+            self.stop()
 
     def run(self):
-        for event in self.events:
-            time.sleep(event.time)
+        if self.ls:
+            self.ls.start()
+        for k, event in enumerate(self.events):
+            self._stop.clear()
+            if self.is_sub and self.events.total_time < 2:
+                pass
+            else:
+                self.enter_launch_event(self.macro_id)
+            if not self.next_macro and (not self.is_sub or self.events.total_time > 2):
+                self.next_macro = self.searchNextMacro(k)
+                self.preload_event(self.next_macro)
+            self.start_event(event.id)
+            self._stop.wait(event.time)
+            if self._stop.is_set():
+                return
             match event.type:
                 case "key":
                     assert isinstance(event, EventKey)
-                    ConK().touch(TABLE_KEY.get(event.key) or event.key, True)
+                    self.ConK.touch(TABLE_KEY.get(event.key) or event.key, True)
+                    self.keys_pressed.add(TABLE_KEY.get(event.key) or event.key)
                 case "key release":
                     assert isinstance(event, EventKeyRelease)
-                    ConK().release(TABLE_KEY.get(event.key) or event.key)
+                    self.ConK.release(TABLE_KEY.get(event.key) or event.key)
                 case "click":
                     assert isinstance(event, EventClick)
-                    x, y, width, height = 0, 0, 0, 0
+                    base_rect = event.pos.base_rect()
+                    if not base_rect:
+                        return
+                    x, y, width, height = base_rect
 
-                    if event.pos.base == PosBase.WINDOWS:
-                        windows_rect = get_windows_pos(event.pos.windows_name)
-                        windows_size = (windows_rect[2] - windows_rect[0], windows_rect[3] - windows_rect[1])
-                        x, y = windows_rect[:2]
-                        width, height = windows_size
-
-                    elif event.pos.base == PosBase.SCREEN:
-                        monitors_detected = list_monitors()
-                        monitors_target = list(filter(lambda m: m.get("Device") == event.pos.windows_name, monitors_detected))
-                        if not monitors_target:
-                            print(f"Moniteur {event.pos.windows_name} non detecté")
-                            continue
-                        monitor_rect = monitors_target[0].get("Monitor")
-                        monitor_size = (monitor_rect[2] - monitor_rect[0], monitor_rect[3] - monitor_rect[1])
-                        x, y = monitor_rect[:2]
-                        width, height = monitor_size
-
-                    ConM().position = event.pos.calcul(x, y, width, height)
-                    ConM().click(event.btn)
+                    self.ConM.position = event.pos.calcul(x, y, width, height)
+                    self.ConM.click(event.btn)
                 case "time":
                     assert isinstance(event, EventSleep)
                     pass
                 case "launch":
                     assert isinstance(event, EventLaunch)
-                    events = database_manager.getEventOfMacro(event.macro)[1]
-                    ls = ListEvent(events)
-                    Simulator(ls).run()
+                    self.sub = Simulator(event.macro, self, k)
+                    self.sub.enter_launch_event = self.enter_launch_event
+                    self.sub.start_event = self.start_event
+                    self.sub._stop = self._stop
+                    self.sub.database_manager = self.database_manager
+                    self.sub.preload_event = self.preload_event
+                    self.sub.run()
+                    if self.sub.events.total_time > 2:
+                        self.next_macro = None
+
+    def stop(self):
+        self._stop.set()
+        if self.ls:
+            self.ls.stop()
+        for key in self.keys_pressed:
+            self.ConK.release(key)
+        if self.sub:
+            self.sub.stop()
+
+    def searchNextMacro(self, index: int):
+        for event_index in range(max(index, self.last_event_verif), min(index+50, len(self.events))):
+            self.last_event_verif = event_index
+            event: Event = self.events[event_index]
+            next_macro = None
+            if isinstance(event, EventLaunch):
+                sub_events = self.database_manager.getEventOfMacro(event.macro)[1]
+                sub_events = ListEvent(sub_events)
+                sub_event_time = 0
+                for sub_event in sub_events:
+                    sub_event_time += sub_event.time
+                    if sub_event_time > 2:
+                        next_macro = event.macro
+                        break
+            if next_macro:
+                return next_macro
+        if index + 10 >= len(self.events):
+            return self.parent.macro_id
+        else:
+            return None

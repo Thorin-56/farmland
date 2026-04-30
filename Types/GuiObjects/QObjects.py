@@ -1,7 +1,9 @@
+from abc import ABCMeta, ABC, abstractmethod
+
 import pynput
 import qasync
 from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QPushButton, QSpinBox, QDoubleSpinBox
-from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtCore import Qt, Signal, QSize, QObject
 from pynput.keyboard import Key, KeyCode
 from pynput.mouse import Button
 
@@ -20,12 +22,12 @@ class CompactDoubleSpinBox(QDoubleSpinBox):
         super().__init__(**kwargs)
         super().valueChanged.connect(lambda v: self.roundedValueChanged.emit(round(v, self.decimals())))
 
-
 class QScroll(QScrollArea):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.items: dict[str, QWidget] = {}
+        self.items_list = []
 
         self.main_widget = QWidget()
         self.vbox = QVBoxLayout()
@@ -43,20 +45,33 @@ class QScroll(QScrollArea):
             return
         self.vbox.addWidget(_object)
         self.items.update({name: _object})
+        self.items_list.append(name)
 
     def insert(self, index, _object, name):
         if name in list(self.items.keys()):
-            return
+            return False
         self.vbox.insertWidget(index, _object)
         self.items.update({name: _object})
+        self.items_list.insert(index, name)
+        return True
 
     def remove(self, name):
         self.vbox.removeWidget(self.items[name])
         self.items.pop(name).deleteLater()
+        self.items_list.remove(name)
+
+    def index(self, name):
+        names = list(self.items.keys())
+        if name not in names:
+            return None
+        return names.index(name)
 
     def clear(self):
         for i in list(self.items.keys()):
             self.remove(i)
+
+    def keyPressEvent(self, event):
+        pass
 
 
 class QHorizontalScroll(QScroll):
@@ -81,7 +96,7 @@ class QScrollCategorie(QWidget):
         self.scroll: QScroll | None = None
 
         self.categ: dict[str, dict[str, QWidget]] = {}
-        self.categ_h = {}
+        self.categ_h: dict[str, dict[str, QWidget]] = {}
         self.categSlc = None
 
     def setCurrentCateg(self, _id):
@@ -147,129 +162,107 @@ class QScrollCategorie(QWidget):
         if self.scroll:
             self.scroll.setGeometry(0, self.headers_height, self.width(), self.height() - self.headers_height)
 
+class QABCMeta(type(QObject), ABCMeta):
+    pass
 
-class QBindKeyButton(QPushButton):
-    _keyPressed = Signal(object)
+class BaseBindButton(QPushButton, ABC, metaclass=QABCMeta):
+    valueSet = Signal(object)
     changed = Signal(object)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.setText("?")
 
-        self.setText(" ? ")
-        self.__key = None
-        self.ls = None
+        self.__value = None
+        self.__ls = None
 
-        self._keyPressed.connect(self._onKeyPressed)
-        self.clicked.connect(self.getKey)
-        self.destroyed.connect(lambda: self.stopOnDestroy(None))
-
-    @staticmethod
-    def stopOnDestroy(ls):
-        if ls is None:
-            return
-        else:
-            ls.stop()
+        self.clicked.connect(self.launchListener)
+        self.valueSet.connect(self.getValue)
 
     @qasync.asyncSlot()
-    async def getKey(self):
-        self._stopListener()
+    async def launchListener(self):
         self.setText("...")
         self.clicked.disconnect()
-        self.ls = pynput.keyboard.Listener(on_press=self._getKey)
         self.destroyed.disconnect()
-        self.destroyed.connect(lambda _, ls1=self.ls: self.stopOnDestroy(ls1))
-        self.ls.start()
+        self.destroyed.connect(lambda _, ls1=self.ls: self.stopListener(ls1))
+        self.startListener()
 
-    def _getKey(self, key: Key | KeyCode | None):
-        try:
-            self._keyPressed.emit(key)
-        except RuntimeError:
-            pass
-        self.clicked.connect(self.getKey)
-        return False
+    def getValue(self, *args, **kwargs):
+        self.value = self.processValue(*args, **kwargs)
+        self.changed.emit(self.value)
+        self.clicked.connect(self.launchListener)
+        self.stopListener(self.ls)
 
-    def _onKeyPressed(self, key):
-        self.__key = key
-        self.setText(str(key))
-        self.changed.emit(key)
-        self._stopListener()
+    def processValue(self, *args, **kwargs):
+        value = args
+        self.setText(value)
+        return value
 
-    def _stopListener(self):
-        if self.ls is not None:
-            self.ls.stop()
-            self.ls = None
+    @abstractmethod
+    def startListener(self):
+        pass
+
+    @abstractmethod
+    def stopListener(self, listener):
+        pass
 
     @property
-    def key(self):
-        return self.__key
+    def value(self):
+        return self.__value
 
-    @key.setter
-    def key(self, value):
-        self.__key = value
+    @value.setter
+    def value(self, value):
+        self.__value = value
+        pass
+
+    @property
+    def ls(self):
+        return self.__ls
+
+    @ls.setter
+    def ls(self, ls):
+        self.__ls = ls
+        self.destroyed.disconnect()
+        self.destroyed.connect(lambda: self.stopListener(self.ls))
 
     def setValue(self, value):
-        self.key = value
+        self.value = value
         self.setText(str(value))
 
 
-class QBindMouseButton(QPushButton):
-    _btnPressed = Signal(object)
-    changed = Signal(object)
+class BindKeyButton(BaseBindButton):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.setText(" ? ")
-        self.__btn = None
+    def stopListener(self, listener: pynput.keyboard.Listener | None):
+        if listener is not None:
+            listener.stop()
         self.ls = None
 
-        self._btnPressed.connect(self._onBtnPressed)
-        self.clicked.connect(self.getBtn)
-        self.destroyed.connect(lambda: self.stopOnDestroy(None))
-
-    @staticmethod
-    def stopOnDestroy(ls):
-        if ls is None:
-            return
-        else:
-            ls.stop()
-
-    @qasync.asyncSlot()
-    async def getBtn(self):
-        self._stopListener()
-        self.setText("...")
-        self.clicked.disconnect()
-        self.ls = pynput.mouse.Listener(on_click=self._getBtn)
-        self.destroyed.disconnect()
-        self.destroyed.connect(lambda _, ls1=self.ls: self.stopOnDestroy(ls1))
+    def startListener(self):
+        self.ls = pynput.keyboard.Listener(on_press=self.getValue)
         self.ls.start()
 
-    def _getBtn(self, _, __, btn: Button):
-        try:
-            self._btnPressed.emit(btn)
-        except RuntimeError:
-            pass
-        self.clicked.connect(self.getBtn)
-        return False
+    def processValue(self, value: Key | KeyCode, _):
+        if isinstance(value, Key):
+            self.setText(value.name)
+        else:
+            self.setText(value.char)
+        return value
 
-    def _onBtnPressed(self, btn: Button):
-        self.__btn = btn
-        self.setText(btn.name)
-        self.changed.emit(btn)
-        self._stopListener()
 
-    def _stopListener(self):
-        if self.ls is not None:
-            self.ls.stop()
-            self.ls = None
+class BindMouseButton(BaseBindButton):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    @property
-    def btn(self):
-        return self.__btn
+    def stopListener(self, listener: pynput.mouse.Listener | None):
+        if listener is not None:
+            listener.stop()
+        self.ls = None
 
-    @btn.setter
-    def btn(self, value):
-        self.__btn = value
+    def startListener(self):
+        self.ls = pynput.mouse.Listener(on_click=self.getValue)
+        self.ls.start()
 
-    def setValue(self, value):
-        self.btn = value
-        self.setText(str(value))
-
+    def processValue(self, x, y, button: Button, pressed, _):
+        self.setText(button.name)
+        return button
