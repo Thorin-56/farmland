@@ -1,10 +1,11 @@
 import asyncio
+import datetime
 import secrets
 
 import qasync
 from PySide6.QtCore import Signal, QRect
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QCheckBox, QComboBox, QWidget
+from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QCheckBox, QComboBox
 
 from Types.GuiObjects.QCustomObjects import EventItem, QNowEvent
 from Types.GuiObjects.QObjects import QScrollCategorie, QScroll
@@ -20,8 +21,7 @@ from windows.list_windows import get_taskbar_apps
 class MainWindows(QMainWindow):
     _anim_signal = Signal(object)
     _launch_anim_signal = Signal(object)
-    _preload_signal = Signal(object)
-    _preload_finish_signal = Signal(object)
+    _event_scroll_area_isload = Signal(object)
     def __init__(self):
         super().__init__()
 
@@ -43,10 +43,11 @@ class MainWindows(QMainWindow):
         self.apps = get_taskbar_apps()
         self.monitors = list_monitors()
 
+        self._event_scroll_area_isload_event_id = None
+
         self.loadEventScrollArea_uuid = None
-        self._anim_signal.connect(self.test)
-        self._launch_anim_signal.connect(self.change_event)
-        self._preload_signal.connect(self.preload_event_area)
+        self._anim_signal.connect(self.launchEventAnim)
+        self._launch_anim_signal.connect(lambda macro_id: self.setMacro(macro_id) if self.macro != macro_id else None)
 
         ## Left Zone
         # Ligne 1
@@ -339,35 +340,9 @@ class MainWindows(QMainWindow):
             if self.loadEventScrollArea_uuid != uuid:
                 return
             self.event_scroll_area.add(item, i.id)
-            await asyncio.sleep(0.0)
+            await asyncio.sleep(0.01)
+            self._event_scroll_area_isload.emit(datetime.datetime.now().timestamp())
 
-    @qasync.asyncSlot()
-    async def loadPreLoadEventScrollArea(self, macro_id):
-        self.pre_load__event_scroll_area.clear()
-        self.loadEventScrollArea_uuid = secrets.token_hex()
-        uuid = self.loadEventScrollArea_uuid
-        events: list[Event] = ListEvent(database_manager.getEventOfMacro(macro_id)[1])
-        button = QPushButton("➕")
-        button.setFixedHeight(30)
-        button.clicked.connect(lambda _: self.addEvent(0, None, macro_id))
-        self.pre_load__event_scroll_area.add(button, "button")
-
-        for k, i in enumerate(events):
-            k += 1
-            item = EventItem(i)
-            item.setEditCallback(lambda _, fi=i.id, fk=k: self.editEvent(fi, fk))
-            item.setSaveCallback(lambda _, fi=item: self.saveEditedEvent(fi))
-            item.setAddCallback(lambda _, fk=k, fi=i.id: self.addEvent(fk + 1, fi, macro_id))
-            item.setDeleteCallback(lambda _, fi=i.id: self.deleteEvent(fi))
-            if self.loadEventScrollArea_uuid != uuid:
-                return
-            self.pre_load__event_scroll_area.add(item, i.id)
-            await asyncio.sleep(0.0)
-        button_finish = QPushButton("➕")
-        button_finish.setFixedHeight(30)
-        button_finish.clicked.connect(lambda _: None)
-        self.pre_load__event_scroll_area.add(QWidget(), "finish")
-        self._preload_finish_signal.emit(macro_id)
 
     # Action Buttons
     @qasync.asyncSlot()
@@ -399,32 +374,18 @@ class MainWindows(QMainWindow):
         self.simulator = Simulator(self.macro)
         self.simulator.start_event = lambda x: [self._anim_signal.emit(x)]
         self.simulator.enter_launch_event = lambda x: [self._launch_anim_signal.emit(x)]
-        self.simulator.preload_event = lambda x: [self._preload_signal.emit(x)]
         self.simulator.run()
         self.event_scroll_area.verticalScrollBar().setDisabled(False)
 
-    def test(self, x):
+    def launchEventAnim(self, x, delay=0):
         a: EventItem = self.event_scroll_area.items.get(x)
+
         if  a:
-            a.loadAnim()
+            a.loadAnim(delay)
             self.event_scroll_area.verticalScrollBar().setValue(self.event_scroll_area.index(x)*36 - self.event_scroll_area.height()//2)
-
-    def change_event(self, macro_id):
-        if self.macro != macro_id:
-            if self.pre_load__event_scroll_area.items.get("finish"):
-                self.change_event_finish(macro_id)
-            else:
-                self._preload_finish_signal.connect(self.change_event_finish)
-
-    def change_event_finish(self, macro_id):
-        last = self.event_scroll_area
-        self.event_scroll_area = self.pre_load__event_scroll_area
-        last.deleteLater()
-        self.event_scroll_area.setGeometry(self.base_geo)
-        self.event_scroll_area.show()
-        self.macro = macro_id
-        self.pre_load__event_scroll_area = QScroll(self)
-        self.pre_load__event_scroll_area.setGeometry(self.base_geo)
-
-    def preload_event_area(self, macro_id):
-        self.loadPreLoadEventScrollArea(macro_id)
+            if self._event_scroll_area_isload_event_id == x:
+                self._event_scroll_area_isload.disconnect()
+                self._event_scroll_area_isload_event_id = None
+        else:
+            self._event_scroll_area_isload_event_id = x
+            self._event_scroll_area_isload.connect(lambda y: [self.launchEventAnim(x, round(datetime.datetime.now().timestamp() - y))])
