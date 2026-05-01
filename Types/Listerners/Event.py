@@ -191,7 +191,7 @@ class Pos:
 
 
 class Event(ABC):
-    def __init__(self, _type, time=0., _id=None):
+    def __init__(self, _type, time=None, _id=None):
         self.id = _id
         self.type = _type
         self.time = time if time is not None else round(datetime.datetime.now().timestamp(), 2)

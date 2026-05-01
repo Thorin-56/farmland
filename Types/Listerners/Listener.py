@@ -52,7 +52,7 @@ class Listener:
 
     def on_click(self, pos: Pos, button: Button, pressed: bool):
         if pressed:
-            self.events.append(EventClick(button.name, pos))
+            self.events.append(EventClick(button, pos, None))
 
     @staticmethod
     def on_move(x, y):
@@ -63,15 +63,15 @@ class Listener:
             self.stop()
             return
         if isinstance(key, Key):
-            self.events.append(EventKey(f"0{key.name}"))
+            self.events.append(EventKey(f"0{key.name}", None))
         if isinstance(key, KeyCode):
-            self.events.append(EventKey(f"1{key.vk}"))
+            self.events.append(EventKey(f"1{key.vk}", None))
 
     def on_release_key(self, key):
         if isinstance(key, Key):
-            self.events.append(EventKeyRelease(f"0{key.name}"))
+            self.events.append(EventKeyRelease(f"0{key.name}", None))
         if isinstance(key, KeyCode):
-            self.events.append(EventKeyRelease(f"1{key.vk}"))
+            self.events.append(EventKeyRelease(f"1{key.vk}", None))
 
     def start(self, params: PosParams = PosParams(False, "SCREEN", None, (0, 0, 0, ))):
         self.params = params
@@ -89,11 +89,11 @@ class Listener:
 
     def save(self, name, categorie, data_manager: DataManager):
         macro_id = data_manager.addMacro(name, categorie)[0]
-        for position, event in enumerate(self.events.jsonify()):
-            e_type, e_time, data = event
+        for position, event in enumerate(self.events):
+            e_type, e_time, data = event.jsonify()
             _position = None
-            if e_type == "click":
-                _position: Pos = data.pop("pos")
+            if isinstance(event, EventClick):
+                _position: Pos = event.pos
             data = str(data)
             event_id = data_manager.addEvent(e_type, e_time, data, macro_id, (position+1)*1000)[0]
             if _position:
