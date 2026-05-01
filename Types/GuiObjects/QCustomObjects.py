@@ -478,7 +478,7 @@ class EventItem(QWidget, Generic[T]):
         self.anim = QVariantAnimation()
         self.anim.setStartValue(0.)
         self.anim.setEndValue(1.)
-        self.anim.setDuration(self.event_value.time*1000-delay)
+        self.anim.setDuration((self.event_value.time-delay)*1000)
         self.anim.valueChanged.connect(lambda color: self.main_frame.setStyleSheet(
             f"*{{background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:{color} rgb{TABLE[self.event_value.type](200, 200)}, stop:{color + 0.01} rgb{TABLE[self.event_value.type](20, 200)}); border-radius: 5px }}"))
         # self.anim.valueChanged.connect(lambda x: print(x))

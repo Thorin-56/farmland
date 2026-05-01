@@ -20,7 +20,7 @@ from windows.list_windows import get_taskbar_apps
 
 class MainWindows(QMainWindow):
     _anim_signal = Signal(object)
-    _launch_anim_signal = Signal(object)
+    _launch_anim_signal = Signal(object, object)
     _event_scroll_area_isload = Signal(object)
     def __init__(self):
         super().__init__()
@@ -47,7 +47,7 @@ class MainWindows(QMainWindow):
 
         self.loadEventScrollArea_uuid = None
         self._anim_signal.connect(self.launchEventAnim)
-        self._launch_anim_signal.connect(lambda macro_id: self.setMacro(macro_id) if self.macro != macro_id else None)
+        self._launch_anim_signal.connect(lambda macro_id, index: self.setMacro(macro_id, max(0, index - 10)) if self.macro != macro_id else None)
 
         ## Left Zone
         # Ligne 1
@@ -215,9 +215,9 @@ class MainWindows(QMainWindow):
 
     # Set Etats
     @qasync.asyncSlot()
-    async def setMacro(self, macro):
+    async def setMacro(self, macro, start_index=0):
         self.macro = macro
-        await self.loadEventScrollArea()
+        await self.loadEventScrollArea(start_index)
 
     @qasync.asyncSlot()
     async def setCategorie(self, categorie):
@@ -320,7 +320,7 @@ class MainWindows(QMainWindow):
         self.macros_scroll_area.add(item, macro[0])
 
     @qasync.asyncSlot()
-    async def loadEventScrollArea(self):
+    async def loadEventScrollArea(self, start_index=0):
         self.event_scroll_area.clear()
         self.loadEventScrollArea_uuid = secrets.token_hex()
         uuid = self.loadEventScrollArea_uuid
@@ -330,7 +330,7 @@ class MainWindows(QMainWindow):
         button.clicked.connect(lambda _: self.addEvent(0, None, self.macro))
         self.event_scroll_area.add(button, "button")
 
-        for k, i in enumerate(events):
+        for k, i in enumerate(events[start_index:]):
             k += 1
             item = EventItem(i)
             item.setEditCallback(lambda _, fi=i.id, fk=k: self.editEvent(fi, fk))
@@ -340,7 +340,7 @@ class MainWindows(QMainWindow):
             if self.loadEventScrollArea_uuid != uuid:
                 return
             self.event_scroll_area.add(item, i.id)
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.00)
             self._event_scroll_area_isload.emit(datetime.datetime.now().timestamp())
 
 
@@ -373,19 +373,19 @@ class MainWindows(QMainWindow):
         self.event_scroll_area.verticalScrollBar().setDisabled(True)
         self.simulator = Simulator(self.macro)
         self.simulator.start_event = lambda x: [self._anim_signal.emit(x)]
-        self.simulator.enter_launch_event = lambda x: [self._launch_anim_signal.emit(x)]
+        self.simulator.enter_launch_event = lambda x, index: [self._launch_anim_signal.emit(x, index)]
         self.simulator.run()
         self.event_scroll_area.verticalScrollBar().setDisabled(False)
 
     def launchEventAnim(self, x, delay=0):
         a: EventItem = self.event_scroll_area.items.get(x)
-
         if  a:
             a.loadAnim(delay)
             self.event_scroll_area.verticalScrollBar().setValue(self.event_scroll_area.index(x)*36 - self.event_scroll_area.height()//2)
             if self._event_scroll_area_isload_event_id == x:
                 self._event_scroll_area_isload.disconnect()
                 self._event_scroll_area_isload_event_id = None
-        else:
+        elif self._event_scroll_area_isload_event_id != x:
             self._event_scroll_area_isload_event_id = x
+            self._event_scroll_area_isload.disconnect()
             self._event_scroll_area_isload.connect(lambda y: [self.launchEventAnim(x, round(datetime.datetime.now().timestamp() - y))])

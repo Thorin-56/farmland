@@ -17,14 +17,14 @@ class Simulator:
         self.events = ListEvent(events)
 
         self._stop = threading.Event()
-        self.stop_key = Key.esc
+        self.stop_key = Key.f12
 
         self.parent = parent
         self.is_sub = not not parent
         self.index = macro_index
 
         self.start_event = lambda _: None
-        self.enter_launch_event = lambda _: None
+        self.enter_launch_event = lambda _, __: None
 
         self.ls = LsK(on_press=self.verifStop) if not parent else None
         self.ConM = ConM()
@@ -42,10 +42,10 @@ class Simulator:
             self.ls.start()
         for k, event in enumerate(self.events):
             self._stop.clear()
-            if self.is_sub and self.events.total_time < 2:
+            if self.is_sub and self.events.total_time < 0.1:
                 pass
             else:
-                self.enter_launch_event(self.macro_id)
+                self.enter_launch_event(self.macro_id, k)
                 self.start_event(event.id)
             self._stop.wait(event.time)
             if self._stop.is_set():
@@ -79,7 +79,7 @@ class Simulator:
                     self.sub.database_manager = self.database_manager
                     self.sub.run()
                     if self._stop.is_set():
-                        self.enter_launch_event(self.macro_id)
+                        self.enter_launch_event(self.macro_id, self.index)
                         return
 
     def stop(self):
