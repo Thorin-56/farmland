@@ -10,4 +10,4 @@ mini jeux Discord "Farmland" mais ensuite upgrader en une application d'automati
 - Python >= 3.14
 
 Cloner le dépot, installer les dépendance avec ``pip install -r .\requirements.txt``
-et lancer ``gui.py``
+et lancer ``main.py``
