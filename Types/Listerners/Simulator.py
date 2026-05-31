@@ -4,7 +4,7 @@ from pynput.keyboard import Controller as ConK, Listener as LsK, Key, KeyCode
 from pynput.mouse import Controller as ConM
 
 from Types.DataManager.DataManager import DataManager
-from Types.Listerners.Event import ListEvent, EventKey, EventKeyRelease, EventClick, EventSleep, EventLaunch
+from Types.Listerners.Event import ListEvent, EventKey, EventKeyRelease, EventClick, EventSleep, EventLaunch, EventWrite
 from VARS import TABLE_KEY
 
 
@@ -81,6 +81,9 @@ class Simulator:
                     if self._stop.is_set():
                         self.enter_launch_event(self.macro_id, self.index)
                         return
+                case "write":
+                    assert isinstance(event, EventWrite)
+                    self.ConK.type(event.text)
 
     def stop(self):
         self._stop.set()

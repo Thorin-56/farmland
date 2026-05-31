@@ -9,8 +9,9 @@ from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QChec
 
 from Types.GuiObjects.QCustomObjects import EventItem, QNowEvent
 from Types.GuiObjects.QObjects import QScrollCategorie, QScroll
-from Types.Listerners.Event import ListEvent, Event, PosBase, Pos, EventClick
+from Types.Listerners.Event import ListEvent, Event, Pos, EventClick
 from Types.Listerners.Listener import Listener
+from Types.Listerners.Pos import PosBase
 from Types.Listerners.Simulator import Simulator
 from Types.app_types import PosParams
 from VARS import database_manager
@@ -47,7 +48,8 @@ class MainWindows(QMainWindow):
 
         self.loadEventScrollArea_uuid = None
         self._anim_signal.connect(self.launchEventAnim)
-        self._launch_anim_signal.connect(lambda macro_id, index: self.setMacro(macro_id, max(0, index - 10)) if self.macro != macro_id else None)
+        self._launch_anim_signal.connect(lambda macro_id, index: self.setMacro(macro_id, max(0, (index or 0) - 10)) if self.macro != macro_id else None)
+        self._event_scroll_area_isload.connect(lambda: None)
 
         ## Left Zone
         # Ligne 1
@@ -389,3 +391,4 @@ class MainWindows(QMainWindow):
             self._event_scroll_area_isload_event_id = x
             self._event_scroll_area_isload.disconnect()
             self._event_scroll_area_isload.connect(lambda y: [self.launchEventAnim(x, round(datetime.datetime.now().timestamp() - y))])
+            self._event_scroll_area_isload_event_id = None

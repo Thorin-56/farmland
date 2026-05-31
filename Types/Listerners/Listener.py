@@ -1,7 +1,8 @@
 from pynput.mouse import Controller as ConM, Button, Listener as SListM
 from pynput.keyboard import Listener as ListK, Key, KeyCode
 from Types.DataManager.DataManager import DataManager
-from Types.Listerners.Event import EventClick, EventKey, EventKeyRelease, ListEvent, Pos, PosBase
+from Types.Listerners.Event import EventClick, EventKey, EventKeyRelease, ListEvent, Pos
+from Types.Listerners.Pos import PosBase
 from VARS import database_manager
 from Types.app_types import PosParams
 from windows.list_monitors import list_monitors
@@ -95,7 +96,7 @@ class Listener:
             if isinstance(event, EventClick):
                 _position: Pos = event.pos
             data = str(data)
-            event_id = data_manager.addEvent(e_type, e_time, data, macro_id, (position+1)*1000)[0]
+            event_id = data_manager.addEvent(e_type, e_time, macro_id, (position+1)*1000)[0]
             if _position:
                 database_manager.addPosition(*_position.jsonify(), event_id)
         return macro_id

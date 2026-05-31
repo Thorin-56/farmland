@@ -1,193 +1,13 @@
 import datetime
 import json
 from abc import abstractmethod, ABC
-from enum import Enum
 
-from PySide6.QtCore import QTimer
 from pynput.keyboard import KeyCode, Key
 from pynput.mouse import Button
 
 from Types.DataManager.DataManager import DataManager
-from VARS import TABLE_MOUSE, database_manager
-from windows.list_monitors import list_monitors
-from windows.previewOverlay import Window, delete_border, WindowBorder
-from windows.windows import get_windows_pos
-
-
-class PosBase(Enum):
-    SCREEN = 1
-    WINDOWS = 2
-
-
-class Pos:
-    def __init__(self, base=None, windows_name=None, x_value=0, x_pourcent_height=0., x_pourcent_width=0.,
-                 y_value=0, y_pourcent_height=0.,
-                 y_pourcent_width=0., margins=(0, 0, 0, 0)):
-        self.base: PosBase | None = base
-        assert isinstance(self.base, PosBase | None)
-
-        self.windows_name = windows_name if self.base is not None else None
-
-        self.x_pourcent_width = float(x_pourcent_width)
-        self.x_pourcent_height = float(x_pourcent_height)
-        self.x_value = x_value
-
-        self.y_pourcent_width = float(y_pourcent_width)
-        self.y_pourcent_height = float(y_pourcent_height)
-        self.y_value = y_value
-
-        self.margins = list(margins)
-
-        self.preview: Window | None = None
-        self.preview2: WindowBorder | None = None
-        self.timer: QTimer | None = None
-        self.timer2: QTimer | None = None
-
-    def calcul(self, x, y, width, height):
-        position_x = 0
-        position_x += (width - self.margins[0] - self.margins[1]) * self.x_pourcent_width / 100
-        position_x += (height - self.margins[2] - self.margins[3]) * self.x_pourcent_height / 100
-
-        position_x += self.x_value
-        position_x += x + self.margins[0]
-
-        position_y = 0
-        position_y += (width - self.margins[0] - self.margins[1]) * self.y_pourcent_width / 100
-        position_y += (height - self.margins[2] - self.margins[3]) * self.y_pourcent_height / 100
-
-        position_y += self.y_value
-        position_y += y + self.margins[2]
-
-        return position_x, position_y
-
-    def startUpdatePoint(self):
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.updatePoint)
-        self.timer.start(10)
-
-    def stopUpdatePoint(self):
-        if self.timer:
-            self.timer.stop()
-            self.timer = None
-        self.remove_preview()
-
-    def startUpdateMarges(self):
-        self.timer2 = QTimer()
-        self.timer2.timeout.connect(self.updateMarges)
-        self.timer2.start(10)
-
-    def stopUpdateMarges(self):
-        if self.timer2:
-            self.timer2.stop()
-            self.timer2 = None
-        self.remove_preview()
-
-    def updateMarges(self):
-        self.affMargins()
-
-    def updatePoint(self):
-        self.aff_point()
-
-    def base_rect(self):
-        if self.base == PosBase.WINDOWS:
-            windows_rect = get_windows_pos(self.windows_name)
-            if not windows_rect:
-                return None
-            windows_size = (windows_rect[2] - windows_rect[0], windows_rect[3] - windows_rect[1])
-            x, y = windows_rect[:2]
-            width, height = windows_size
-            return x, y, width, height
-
-        elif self.base == PosBase.SCREEN:
-            monitors_detected = list_monitors()
-            monitors_target = list(filter(lambda m: m.get("Device") == self.windows_name, monitors_detected))
-            if not monitors_target:
-                return None
-            monitor_rect = monitors_target[0].get("Monitor")
-            monitor_size = (monitor_rect[2] - monitor_rect[0], monitor_rect[3] - monitor_rect[1])
-            x, y = monitor_rect[:2]
-            width, height = monitor_size
-            return x, y, width, height
-        return 0, 0, 0, 0
-
-    def affMargins(self):
-        base_rect = self.base_rect()
-        if not base_rect:
-            self.timer2.setInterval(2000)
-            return
-        x, y, width, height = base_rect
-        if self.timer2.interval() == 2000:
-            self.timer2.setInterval(10)
-
-        if self.preview2:
-            if (
-                    self.preview2.x == x and self.preview2.y == y and self.preview2.width == width and self.preview2.height == height and
-                    [self.preview2.x_start, self.preview2.x_end, self.preview2.y_start,
-                     self.preview2.y_end] == self.margins):
-                return
-            else:
-                self.preview2.deleteLater()
-                self.preview2 = WindowBorder(x, y, width, height, *self.margins)
-                self.preview2.show()
-                return
-        self.preview2 = WindowBorder(x, y, width, height, *self.margins)
-        self.preview2.show()
-        delete_border(self.preview2)
-
-    def aff_point(self):
-        base_rect = self.base_rect()
-        if not base_rect:
-            self.timer.setInterval(2000)
-            return
-        x, y, width, height = base_rect
-        if self.timer.interval() == 2000:
-            self.timer.setInterval(10)
-
-        if self.preview:
-            if self.preview.x == x and self.preview.y == y:
-                return
-            else:
-                self.preview.move(*self.calcul(x, y, width, height))
-                return
-        self.preview = Window(*self.calcul(x, y, width, height), d=25)
-        self.preview.show()
-        delete_border(self.preview)
-
-    def remove_preview(self):
-        if self.preview:
-            self.preview.deleteLater()
-            self.preview = None
-        if self.preview2:
-            self.preview2.deleteLater()
-            self.preview2 = None
-
-    def __str__(self):
-        if self.base:
-            return f"{self.base.name} {self.windows_name} {self.x_pourcent_width}% + {self.x_pourcent_height}%  + {self.x_value}; {self.y_pourcent_width}% + {self.y_pourcent_height}% + {self.y_value}"
-        else:
-            return f"{self.x_value}; {self.y_value}"
-
-    def jsonify(self):
-        return self.base.name if self.windows_name else None, self.windows_name, self.x_pourcent_width, self.x_pourcent_height, self.x_value, self.y_pourcent_width, self.y_pourcent_height, self.y_value, str(
-            self.margins)
-
-    def __eq__(self, other):
-        if isinstance(other, Pos):
-            return ((self.base.name if self.base else None, self.windows_name, self.x_pourcent_width,
-                     self.x_pourcent_height, self.x_value, self.y_pourcent_width, self.y_pourcent_height, self.y_value,
-                     self.margins) ==
-                    (other.base.name if other.base else None, other.windows_name, other.x_pourcent_width,
-                     other.x_pourcent_height, other.x_value, other.y_pourcent_width, other.y_pourcent_height,
-                     other.y_value, other.margins))
-        return False
-
-    def isValable(self):
-        return (type(self.x_value) == type(self.y_value) == int and
-                type(self.x_pourcent_width) == type(self.x_pourcent_height) == type(self.y_pourcent_width) == type(
-                    self.y_pourcent_height) == float and
-                type(self.margins) == list and len(self.margins) == 4 and all(
-                    [type(marge) == int for marge in self.margins]) and
-                (type(self.base) == PosBase or self.base is None) and isinstance(self.windows_name, str | None))
+from Types.Listerners.Pos import Pos, PosBase
+from VARS import TABLE_MOUSE
 
 
 class Event(ABC):
@@ -283,28 +103,33 @@ class EventClick(Event):
 
 
 class EventMove(Event):
-    def __init__(self, btn, pos_src, pos_dst, time=None, _id=None):
+    def __init__(self, btn, duration, pos_src, pos_dst, time=None, _id=None):
         super().__init__("move", time, _id)
         self.btn = btn
-        self.pos_src: list[int] = pos_src
-        self.pos_dst: list[int] = pos_dst
+        self.duration: float = duration
+        self.pos_src: Pos = pos_src
+        self.pos_dst: Pos = pos_dst
 
     def __str__(self):
-        return f"[{self.time}] [{self.type}] Button: {self.btn} Pos source: {self.pos_src} Pos destination: {self.pos_dst}"
+        return f"[{self.time}] [{self.type}] Button: {self.btn} Duration: {self.duration} Pos source: {self.pos_src} Pos destination: {self.pos_dst}"
 
     def __eq__(self, other: EventMove):
         if type(other) != type(self):
             return False
-        return (self.type, self.time, self.btn, self.pos_src, self.pos_dst) == (other.type, other.time, other.btn, other.pos_src,
-                                                                     other.pos_dst)
+        return (self.type, self.time, self.btn, self.duration, self.pos_src, self.pos_dst) == (other.type, other.time,
+                                                                                               other.btn,
+                                                                                               other.duration,
+                                                                                               other.pos_src,
+                                                                                               other.pos_dst)
 
     def jsonify(self):
-        return self.type, self.time, json.dumps({"btn": self.btn, "pos_src": self.pos_src, "pos_dst": self.pos_dst})
+        return self.type, self.time, json.dumps(
+            {"btn": self.btn, 'duration': self.duration, "pos_src": self.pos_src, "pos_dst": self.pos_dst})
 
     def isValable(self):
         return (isinstance(self.btn, Button) and
-                len(self.pos_src) == 2 and isinstance(self.pos_src[0], int) and isinstance(self.pos_src[1], int) and
-                len(self.pos_dst) == 2 and isinstance(self.pos_dst[0], int) and isinstance(self.pos_dst[1], int))
+                self.pos_src.isValable() and self.pos_dst.isValable() and
+                isinstance(self.duration, float))
 
 
 class EventSleep(Event):
@@ -332,7 +157,7 @@ class EventLaunch(Event):
         self.macro = macro
 
     def __str__(self):
-        return f"[{self.time}] [{self.type}] Macro: [{self.macro}] {DataManager().getMacro(self.macro)[1][0][1]}"
+        return f"[{self.time}] [{self.type}] Macro: [{self.macro}] {DataManager().getMacro(self.macro)[1][1]}"
 
     def __eq__(self, other: EventLaunch):
         if type(other) != type(self):
@@ -346,13 +171,32 @@ class EventLaunch(Event):
         return isinstance(self.macro, int)
 
 
+class EventWrite(Event):
+    def __init__(self, text, time=None, _id=None):
+        super().__init__("write", time, _id)
+        self.text = text
+
+    def __str__(self):
+        return f"[{self.time}] [{self.type}] Text: {self.text}"
+
+    def __eq__(self, other: EventWrite):
+        if type(other) != type(self):
+            return False
+        return (self.type, self.time, self.text) == (other.type, other.time, other.text)
+
+    def jsonify(self):
+        return self.type, self.time, json.dumps({"text": self.text})
+
+    def isValable(self):
+        return isinstance(self.text, str) and self.text
+
+
 class ListEvent(list[Event]):
     def __init__(self, events=None):
         super().__init__()
         self.base_time = None
         self.key_pressed = set()
         self.total_time = 0
-
         if events:
             self.__load(events)
 
@@ -360,36 +204,50 @@ class ListEvent(list[Event]):
         assert isinstance(events, list)
         final_events = []
         for event in events:
-            (e_id, e_type, e_time, macro_id, data, pos_id, base, windows_name,
-             x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, event_id,
-             margins) = event
-            try:
-                data = json.loads(data)
-            except json.decoder.JSONDecodeError:
-                data = data.replace("'", "\"")
-                data = json.loads(data)
-                DataManager().updateEvent(event_id, {"data": json.dumps(data)})
+            event_id, e_type, time, order = event["id"], event["type"], event["time"], event["_order"]
 
-            if e_type == "click":
-                margins = eval(margins)
-                data["btn"] = TABLE_MOUSE[data.get("btn")]
-            if base is not None:
-                base = PosBase[base]
             match e_type:
                 case "key":
-                    final_events.append(EventKey(time=e_time, _id=e_id, **data))
+                    key = event["key_pressed"]
+                    final_events.append(EventKey(key, time=time, _id=event_id))
                 case "key release":
-                    final_events.append(EventKeyRelease(time=e_time, _id=e_id, **data))
+                    key = event["key_release"]
+                    final_events.append(EventKeyRelease(key, time=time, _id=event_id))
                 case "click":
-                    data["pos"] = Pos(base, windows_name, x_value, x_pourcent_height, x_pourcent_width, y_value,
-                                      y_pourcent_height, y_pourcent_width, margins)
-                    final_events.append(EventClick(time=e_time, _id=e_id, **data))
+                    button, position_id = event["button"], event["position"]
+                    position = DataManager().getPosition(position_id)[1]
+                    position = Pos(PosBase[position["base"]] if position["base"] else None, position["windows_name"], position["x_value"],
+                                   position["x_pourcent_height"], position["x_pourcent_width"], position["y_value"],
+                                   position["y_pourcent_height"], position["y_pourcent_width"],
+                                   [position["margin_left"], position["margin_right"], position["margin_top"],
+                                    position["margin_bottom"]])
+                    final_events.append(EventClick(btn=TABLE_MOUSE[button], time=time, _id=event_id, pos=position))
                 case "move":
-                    final_events.append(EventMove(time=e_time, _id=e_id, **data))
+                    position_source_id, position_destination_id, duration = event["position_source"], event[
+                        "position_destination"], event["duration"]
+                    position = DataManager().getPosition(position_source_id)[1]
+                    position_source = Pos(position["base"], position["windows_name"], position["x_value"],
+                                   position["x_pourcent_height"], position["x_pourcent_width"], position["y_value"],
+                                   position["y_pourcent_height"], position["y_pourcent_width"],
+                                   [position["margin_left"], position["margin_right"], position["margin_top"],
+                                    position["margin_bottom"]])
+                    position = DataManager().getPosition(position_destination_id)[1]
+                    position_destination = Pos(position["base"], position["windows_name"], position["x_value"],
+                                   position["x_pourcent_height"], position["x_pourcent_width"], position["y_value"],
+                                   position["y_pourcent_height"], position["y_pourcent_width"],
+                                   [position["margin_left"], position["margin_right"], position["margin_top"],
+                                    position["margin_bottom"]])
+                    final_events.append(
+                        EventMove(TABLE_MOUSE["left"], duration, position_source, position_destination, time=time,
+                                  _id=event_id))
                 case "sleep":
-                    final_events.append(EventSleep(time=e_time, _id=e_id))
+                    final_events.append(EventSleep(time=time, _id=event_id))
                 case "launch":
-                    final_events.append(EventLaunch(time=e_time, _id=e_id, **data))
+                    macro = event["macro"]
+                    final_events.append(EventLaunch(macro, time, event_id))
+                case "write":
+                    text = event["text"]
+                    final_events.append(EventWrite(text, time, event_id))
         for event in final_events:
             self.total_time += event.time
             super().append(event)

@@ -7,13 +7,14 @@ from PySide6.QtWidgets import *
 
 from Types.GuiObjects.QObjects import CompactSpinBox, CompactDoubleSpinBox, BindKeyButton, BindMouseButton
 from Types.GuiObjects.QObjects import QScroll
-from Types.Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch, Pos
+from Types.Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch, Pos, EventWrite
 from VARS import database_manager
 
 TABLE = {
-    "key": lambda x, y: f"({x}, {x}, {y})",
-    "key release": lambda x, y: f"({x}, {y}, {x})",
     "click": lambda x, y: f"({y}, {x}, {x})",
+    "key release": lambda x, y: f"({x}, {y}, {x})",
+    "key": lambda x, y: f"({x}, {x}, {y})",
+    "write": lambda x, y: f"({y}, {y}, {x})",
     "launch": lambda x, y: f"({y}, {x}, {y})",
     "edit": lambda x, y: f"({y}, {y}, {y})",
 }
@@ -314,6 +315,25 @@ class ConfigKeyReleaseItem(ConfigItem[EventKeyRelease]):
     def setKey(self, value):
         self.event.key = value
 
+class ConfigWriteItem(ConfigItem[EventWrite]):
+    _type = EventWrite
+    def __init__(self, parent: QScroll, event: EventWrite):
+        super().__init__(parent, event)
+        frame_text = self.addFrame("text")
+        self.label_text = QLabel("Text: ")
+        self.edit_text = QLineEdit()
+        self.edit_text.textChanged.connect(self.setText)
+        frame_text.addWidget(self.label_text)
+        frame_text.addWidget(self.edit_text)
+
+    @ConfigItem.resetValue
+    def resetValues(self):
+        self.edit_text.setText(self.event.text)
+
+    @ConfigItem.updateValue
+    def setText(self, value):
+        self.event.text = value
+
 class ConfigLaunchItem(ConfigItem[EventLaunch]):
     _type = EventLaunch
     def __init__(self, parent: QScroll, event: EventLaunch):
@@ -351,7 +371,6 @@ class ConfigLaunchItem(ConfigItem[EventLaunch]):
     def resetValues(self):
         macro = database_manager.getInfoOfMacro(self.event.macro)[1]
         if macro:
-            macro = macro[0]
             categ_name = macro[4]
             macro_name = macro[1]
             self.edit_categorie.setCurrentText(f"[{macro[3]}] {categ_name}")
@@ -523,7 +542,7 @@ class QNowEvent(QFrame):
         self.label_type.setGeometry(5, 0, 100, 30)
 
         self.combo_type = QComboBox(self.frame_type)
-        self.combo_type.addItems(("click", "key", "key release", "launch"))
+        self.combo_type.addItems(("click", "key", "key release", "launch", "write"))
         self.combo_type.setGeometry(110, 0, 100, 30)
         self.combo_type.currentTextChanged.connect(self.setType)
 
@@ -561,6 +580,8 @@ class QNowEvent(QFrame):
                 self.current_event = EventKeyRelease(None, 0.)
             case "click":
                 self.current_event = EventClick(None, Pos(), 0.)
+            case "write":
+                self.current_event = EventWrite("", 0.)
 
         self.config_item = ConfigItem(self.arg_vbox, self.current_event)
         cancel_button = self.config_item.addButton("Annuler", "cancel")
