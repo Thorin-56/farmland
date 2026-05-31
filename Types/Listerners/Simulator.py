@@ -4,7 +4,8 @@ from pynput.keyboard import Controller as ConK, Listener as LsK, Key, KeyCode
 from pynput.mouse import Controller as ConM
 
 from Types.DataManager.DataManager import DataManager
-from Types.Listerners.Event import ListEvent, EventKey, EventKeyRelease, EventClick, EventSleep, EventLaunch, EventWrite
+from Types.Listerners.Event import ListEvent, EventKey, EventKeyRelease, EventClick, EventSleep, EventLaunch, \
+    EventWrite, EventMove
 from VARS import TABLE_KEY
 
 
@@ -84,6 +85,23 @@ class Simulator:
                 case "write":
                     assert isinstance(event, EventWrite)
                     self.ConK.type(event.text)
+                case "move":
+                    assert isinstance(event, EventMove)
+                    base_rect = event.pos_src.base_rect()
+                    if not base_rect:
+                        return
+                    x, y, width, height = base_rect
+
+                    pos_src = event.pos_src.calcul(x, y, width, height)
+                    self.ConM.position = pos_src
+                    self.ConM.press(event.btn)
+                    base_rect = event.pos_dst.base_rect()
+                    if not base_rect:
+                        return
+                    x, y, width, height = base_rect
+                    pos_dst = event.pos_dst.calcul(x, y, width, height)
+                    self.ConM.move(pos_dst[0] - pos_src[0], pos_dst[1] - pos_dst[1])
+                    self.ConM.release(event.btn)
 
     def stop(self):
         self._stop.set()

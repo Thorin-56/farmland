@@ -124,7 +124,7 @@ class EventMove(Event):
 
     def jsonify(self):
         return self.type, self.time, json.dumps(
-            {"btn": self.btn, 'duration': self.duration, "pos_src": self.pos_src, "pos_dst": self.pos_dst})
+            {"btn": self.btn.name if self.btn else None, 'duration': self.duration})
 
     def isValable(self):
         return (isinstance(self.btn, Button) and
