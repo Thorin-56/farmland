@@ -1,4 +1,5 @@
 import threading
+import time
 
 from pynput.keyboard import Controller as ConK, Listener as LsK, Key, KeyCode
 from pynput.mouse import Controller as ConM
@@ -14,7 +15,7 @@ class Simulator:
         self.macro_id = macro_id
 
         self.database_manager = DataManager()
-        events = self.database_manager.getEventOfMacro(self.macro_id)[1]
+        events = self.database_manager.Event.getEventOfMacro(self.macro_id)[1]
         self.events = ListEvent(events)
 
         self._stop = threading.Event()
@@ -94,15 +95,24 @@ class Simulator:
 
                     pos_src = event.pos_src.calcul(x, y, width, height)
                     self.ConM.position = pos_src
+                    time.sleep(0.01)
                     self.ConM.press(event.btn)
+                    time.sleep(0.01)
                     base_rect = event.pos_dst.base_rect()
                     if not base_rect:
                         return
                     x, y, width, height = base_rect
                     pos_dst = event.pos_dst.calcul(x, y, width, height)
-                    self.ConM.move(pos_dst[0] - pos_src[0], pos_dst[1] - pos_dst[1])
+                    step_numbers = int(max(event.duration, 0.1) // 0.01)
+                    vecteur = pos_dst[0] - pos_src[0], pos_dst[1] - pos_src[1]
+                    step_vecteur = vecteur[0] / step_numbers, vecteur[1] / step_numbers
+                    print(step_vecteur, vecteur, step_numbers)
+                    for i in range(step_numbers):
+                        self.ConM.position = pos_src[0] + step_vecteur[0] * i, pos_src[1] + step_vecteur[1] * i
+                        time.sleep(0.01)
+                    self.ConM.position = pos_dst
+                    time.sleep(0.01)
                     self.ConM.release(event.btn)
-
     def stop(self):
         self._stop.set()
         if self.ls:

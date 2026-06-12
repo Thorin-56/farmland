@@ -89,16 +89,9 @@ class Listener:
         self.key.join()
 
     def save(self, name, categorie, data_manager: DataManager):
-        macro_id = data_manager.addMacro(name, categorie)[0]
+        macro_id = data_manager.Macro.add(name, categorie)[0]
         for position, event in enumerate(self.events):
-            e_type, e_time, data = event.jsonify()
-            _position = None
-            if isinstance(event, EventClick):
-                _position: Pos = event.pos
-            data = str(data)
-            event_id = data_manager.addEvent(e_type, e_time, macro_id, (position+1)*1000)[0]
-            if _position:
-                database_manager.addPosition(*_position.jsonify(), event_id)
+            event.save(data_manager, macro_id, (position+1)*1000)
         return macro_id
 
 if __name__ == '__main__':

@@ -11,8 +11,10 @@ from VARS import TABLE_MOUSE
 
 
 class Event(ABC):
-    def __init__(self, _type, time=None, _id=None):
+    def __init__(self, _type, time=None, _id=None, macro_id=None, order=None):
         self.id = _id
+        self.macro_id = macro_id
+        self.order=order
         self.type = _type
         self.time = time if time is not None else round(datetime.datetime.now().timestamp(), 2)
 
@@ -23,17 +25,25 @@ class Event(ABC):
         return (self.type, self.time) == (other.type, other.time)
 
     @abstractmethod
-    def jsonify(self):
+    def jsonify(self) -> tuple[str, float, dict]:
         return self.type, self.time, json.dumps({})
 
     @abstractmethod
     def isValable(self):
         pass
 
+    @abstractmethod
+    def save(self, database_manager: DataManager, macro_id, order):
+        pass
+
+    @abstractmethod
+    def update(self, database_manager: DataManager):
+        pass
+
 
 class EventKey(Event):
-    def __init__(self, key, time=0., _id=None):
-        super().__init__("key", time, _id)
+    def __init__(self, key, time=0., _id=None, macro_id=None, order=None):
+        super().__init__("key", time, _id, macro_id, order)
         if key:
             if key[0] == "1":
                 self.key: KeyCode = KeyCode.from_vk(int(key[1:]))
@@ -64,16 +74,27 @@ class EventKey(Event):
     def isValable(self):
         return isinstance(self.key, KeyCode) or isinstance(self.key, Key)
 
+    def save(self, database_manager: DataManager, macro_id, order):
+        database_manager.KeyPressed.add(self.time, macro_id,
+                                        f"0{self.key.name}" if isinstance(self.key, Key) else f"1{self.key.vk}", order)
+
+    def update(self, database_manager: DataManager):
+        pass
+
 
 class EventKeyRelease(EventKey):
-    def __init__(self, key, time=0., _id=None):
-        super().__init__(key, time, _id)
+    def __init__(self, key, time=0., _id=None, macro_id=None, order=None):
+        super().__init__(key, time, _id, macro_id, order)
         self.type = "key release"
+
+    def save(self, database_manager: DataManager, macro_id, order):
+        database_manager.KeyRelease.add(self.time, macro_id,
+                                        f"0{self.key.name}" if isinstance(self.key, Key) else f"1{self.key.vk}", order)
 
 
 class EventClick(Event):
-    def __init__(self, btn, pos, time=0., _id=None):
-        super().__init__("click", time, _id)
+    def __init__(self, btn, pos, time=0., _id=None, macro_id=None, order=None):
+        super().__init__("click", time, _id, macro_id, order)
         assert isinstance(btn, Button | None)
         self.__btn: Button = btn
         self.pos: Pos = pos
@@ -101,12 +122,21 @@ class EventClick(Event):
     def isValable(self):
         return isinstance(self.btn, Button) and self.pos.isValable()
 
+    def save(self, database_manager: DataManager, macro_id, order):
+        database_manager.Click.add(self.time, macro_id, self.btn.name, self.pos, order)
+
+    def update(self, database_manager: DataManager):
+        if not self.id:
+            return None
+        database_manager.Click.update(self.id, self.time, self.btn.name, self.pos, self.order)
+        return True
+
 
 class EventMove(Event):
-    def __init__(self, btn, duration, pos_src, pos_dst, time=None, _id=None):
-        super().__init__("move", time, _id)
+    def __init__(self, btn, duration, pos_src, pos_dst, time=None, _id=None, macro_id=None, order=None):
+        super().__init__("move", time, _id, macro_id, order)
         self.btn = btn
-        self.duration: float = duration
+        self.duration: float = float(duration)
         self.pos_src: Pos = pos_src
         self.pos_dst: Pos = pos_dst
 
@@ -131,10 +161,16 @@ class EventMove(Event):
                 self.pos_src.isValable() and self.pos_dst.isValable() and
                 isinstance(self.duration, float))
 
+    def save(self, database_manager: DataManager, macro_id, order):
+        database_manager.Move.add(self.time, macro_id, self.pos_src, self.pos_dst, self.duration, order)
+
+    def update(self, database_manager: DataManager):
+        database_manager.Move.update(self.id, self.time, self.btn.name, self.duration, self.pos_src, self.pos_dst, self.order)
+
 
 class EventSleep(Event):
-    def __init__(self, time=None, _id=None):
-        super().__init__("sleep", time, _id)
+    def __init__(self, time=None, _id=None, macro_id=None, order=None):
+        super().__init__("sleep", time, _id, macro_id, order)
 
     def __str__(self):
         return f"[{self.time}] [{self.type}]"
@@ -150,14 +186,20 @@ class EventSleep(Event):
     def jsonify(self):
         return self.type, self.time, json.dumps({})
 
+    def save(self, database_manager: DataManager, macro_id, order):
+        pass
+
+    def update(self, database_manager: DataManager):
+        pass
+
 
 class EventLaunch(Event):
-    def __init__(self, macro, time=None, _id=None):
-        super().__init__("launch", time, _id)
+    def __init__(self, macro, time=None, _id=None, macro_id=None, order=None):
+        super().__init__("launch", time, _id, macro_id, order)
         self.macro = macro
 
     def __str__(self):
-        return f"[{self.time}] [{self.type}] Macro: [{self.macro}] {DataManager().getMacro(self.macro)[1][1]}"
+        return f"[{self.time}] [{self.type}] Macro: [{self.macro}] {DataManager().Macro.get(self.macro)[1][1]}"
 
     def __eq__(self, other: EventLaunch):
         if type(other) != type(self):
@@ -170,10 +212,16 @@ class EventLaunch(Event):
     def isValable(self):
         return isinstance(self.macro, int)
 
+    def save(self, database_manager: DataManager, macro_id, order):
+        database_manager.Launch.add(self.time, macro_id, self.macro, order)
+
+    def update(self, database_manager: DataManager):
+        database_manager.Launch.update(self.id, self.time, self.macro, self.order)
+
 
 class EventWrite(Event):
-    def __init__(self, text, time=None, _id=None):
-        super().__init__("write", time, _id)
+    def __init__(self, text, time=None, _id=None, macro_id=None, order=None):
+        super().__init__("write", time, _id, macro_id, order)
         self.text = text
 
     def __str__(self):
@@ -190,6 +238,12 @@ class EventWrite(Event):
     def isValable(self):
         return isinstance(self.text, str) and self.text
 
+    def save(self, database_manager: DataManager, macro_id, order):
+        database_manager.Write.add(self.time, macro_id, self.text, order)
+
+    def update(self, database_manager: DataManager):
+        database_manager.Write.update(self.id, self.time, self.text, self.order)
+
 
 class ListEvent(list[Event]):
     def __init__(self, events=None):
@@ -204,50 +258,57 @@ class ListEvent(list[Event]):
         assert isinstance(events, list)
         final_events = []
         for event in events:
-            event_id, e_type, time, order = event["id"], event["type"], event["time"], event["_order"]
+            event_id, e_type, time, order, macro_id = event["id"], event["type"], event["time"], event["_order"], event["macro_id"]
 
             match e_type:
                 case "key":
                     key = event["key_pressed"]
-                    final_events.append(EventKey(key, time=time, _id=event_id))
+                    final_events.append(EventKey(key, time=time, _id=event_id, macro_id=macro_id, order=order))
                 case "key release":
                     key = event["key_release"]
-                    final_events.append(EventKeyRelease(key, time=time, _id=event_id))
+                    final_events.append(EventKeyRelease(key, time=time, _id=event_id, macro_id=macro_id, order=order))
                 case "click":
                     button, position_id = event["button"], event["position"]
-                    position = DataManager().getPosition(position_id)[1]
-                    position = Pos(PosBase[position["base"]] if position["base"] else None, position["windows_name"], position["x_value"],
+                    position = DataManager().Position.get(position_id)[1]
+                    position = Pos(position["id"], PosBase[position["base"]] if position["base"] else None,
+                                   position["windows_name"],
+                                   position["x_value"],
                                    position["x_pourcent_height"], position["x_pourcent_width"], position["y_value"],
                                    position["y_pourcent_height"], position["y_pourcent_width"],
                                    [position["margin_left"], position["margin_right"], position["margin_top"],
                                     position["margin_bottom"]])
-                    final_events.append(EventClick(btn=TABLE_MOUSE[button], time=time, _id=event_id, pos=position))
+                    final_events.append(EventClick(btn=TABLE_MOUSE[button], time=time, _id=event_id, macro_id=macro_id, order=order, pos=position))
                 case "move":
                     position_source_id, position_destination_id, duration = event["position_source"], event[
                         "position_destination"], event["duration"]
-                    position = DataManager().getPosition(position_source_id)[1]
-                    position_source = Pos(position["base"], position["windows_name"], position["x_value"],
-                                   position["x_pourcent_height"], position["x_pourcent_width"], position["y_value"],
-                                   position["y_pourcent_height"], position["y_pourcent_width"],
-                                   [position["margin_left"], position["margin_right"], position["margin_top"],
-                                    position["margin_bottom"]])
-                    position = DataManager().getPosition(position_destination_id)[1]
-                    position_destination = Pos(position["base"], position["windows_name"], position["x_value"],
-                                   position["x_pourcent_height"], position["x_pourcent_width"], position["y_value"],
-                                   position["y_pourcent_height"], position["y_pourcent_width"],
-                                   [position["margin_left"], position["margin_right"], position["margin_top"],
-                                    position["margin_bottom"]])
+                    position = DataManager().Position.get(position_source_id)[1]
+                    position_source = Pos(position["id"], position["base"], position["windows_name"],
+                                          position["x_value"],
+                                          position["x_pourcent_height"], position["x_pourcent_width"],
+                                          position["y_value"],
+                                          position["y_pourcent_height"], position["y_pourcent_width"],
+                                          [position["margin_left"], position["margin_right"], position["margin_top"],
+                                           position["margin_bottom"]])
+                    position = DataManager().Position.get(position_destination_id)[1]
+                    position_destination = Pos(position["id"], position["base"], position["windows_name"],
+                                               position["x_value"],
+                                               position["x_pourcent_height"], position["x_pourcent_width"],
+                                               position["y_value"],
+                                               position["y_pourcent_height"], position["y_pourcent_width"],
+                                               [position["margin_left"], position["margin_right"],
+                                                position["margin_top"],
+                                                position["margin_bottom"]])
                     final_events.append(
                         EventMove(TABLE_MOUSE["left"], duration, position_source, position_destination, time=time,
-                                  _id=event_id))
+                                  _id=event_id, macro_id=macro_id, order=order))
                 case "sleep":
-                    final_events.append(EventSleep(time=time, _id=event_id))
+                    final_events.append(EventSleep(time=time, _id=event_id, macro_id=macro_id, order=order))
                 case "launch":
                     macro = event["macro"]
-                    final_events.append(EventLaunch(macro, time, event_id))
+                    final_events.append(EventLaunch(macro, time, event_id, macro_id=macro_id, order=order))
                 case "write":
                     text = event["text"]
-                    final_events.append(EventWrite(text, time, event_id))
+                    final_events.append(EventWrite(text, time, event_id, macro_id=macro_id, order=order))
         for event in final_events:
             self.total_time += event.time
             super().append(event)

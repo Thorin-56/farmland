@@ -2,7 +2,6 @@ import copy
 from typing import Generic, TypeVar
 
 from PySide6.QtCore import Qt, Signal, QVariantAnimation
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import *
 
 from Types.GuiObjects.QObjects import CompactSpinBox, CompactDoubleSpinBox, BindKeyButton, BindMouseButton
@@ -292,6 +291,15 @@ class ConfigMoveItem(ConfigItem[EventMove]):
 
         self.edit_button.changed.connect(self.setButton)
 
+        # Button
+        frame_duration = self.addFrame("duration")
+        self.label_duration = QLabel("Durée: ")
+        self.edit_duration = CompactDoubleSpinBox(minimum=0.01, maximum=9999, singleStep=0.01)
+        frame_duration.addWidget(self.label_duration)
+        frame_duration.addWidget(self.edit_duration)
+
+        self.edit_duration.valueChanged.connect(self.setDuration)
+
         # Margins
         self.addTitle("Marges", 'margins title')
         frame_margins = self.addFrame("margins")
@@ -403,6 +411,7 @@ class ConfigMoveItem(ConfigItem[EventMove]):
     @ConfigItem.resetValue
     def resetValues(self):
         self.edit_button.setValue(self.event.btn)
+        self.edit_duration.setValue(self.event.duration)
 
         self.margin_left.setValue(self.event.pos_dst.margins[0])
         self.margin_right.setValue(self.event.pos_dst.margins[1])
@@ -440,6 +449,10 @@ class ConfigMoveItem(ConfigItem[EventMove]):
     @ConfigItem.updateValue
     def setButton(self, value):
         self.event.btn = value
+
+    @ConfigItem.updateValue
+    def setDuration(self, value):
+        self.event.duration = value
 
     @ConfigItem.updateValue
     def setMargins(self, index, value):
@@ -560,7 +573,7 @@ class ConfigLaunchItem(ConfigItem[EventLaunch]):
         self.label_categorie = QLabel("Catégorie: ")
         self.edit_categorie = QComboBox()
         self.edit_categorie.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px; padding: 0 0 0 5px")
-        categories = database_manager.getCategories()[1]
+        categories = database_manager.Categorie.getAlls()[1]
         self.edit_categorie.addItems([f"[{categorie[0]}] {categorie[1]}" for categorie in categories])
 
         frame_categorie.addWidget(self.label_categorie)
@@ -574,11 +587,11 @@ class ConfigLaunchItem(ConfigItem[EventLaunch]):
         self.edit_name.setStyleSheet(
             f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px; padding: 0 0 0 5px")
         self.edit_name.addItems(
-            [f"[{macro[0]}] {macro[1]}" for macro in database_manager.getMacroOfCategorie(categories[0][0])[1]])
+            [f"[{macro[0]}] {macro[1]}" for macro in database_manager.Macro.getMacroOfCategorie(categories[0][0])[1]])
 
         self.edit_categorie.currentTextChanged.connect(lambda text: [self.edit_name.clear(), self.edit_name.addItems(
             [f"[{macro[0]}] {macro[1]}" for macro in
-             database_manager.getMacroOfCategorie(text[1:text.index(']')])[1]])])
+             database_manager.Macro.getMacroOfCategorie(text[1:text.index(']')])[1]])])
         self.edit_name.currentTextChanged.connect(lambda text: self.setMacro(int(text[1:text.index("]")]) if text else None))
 
         frame_name.addWidget(self.label_name)
@@ -586,7 +599,7 @@ class ConfigLaunchItem(ConfigItem[EventLaunch]):
 
     @ConfigItem.resetValue
     def resetValues(self):
-        macro = database_manager.getInfoOfMacro(self.event.macro)[1]
+        macro = database_manager.Macro.getInfoOfMacro(self.event.macro)[1]
         if macro:
             categ_name = macro[4]
             macro_name = macro[1]

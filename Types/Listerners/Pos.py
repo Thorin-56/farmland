@@ -13,9 +13,11 @@ class PosBase(Enum):
 
 
 class Pos:
-    def __init__(self, base=None, windows_name=None, x_value=0, x_pourcent_height=0., x_pourcent_width=0.,
+    def __init__(self, _id=None, base=None, windows_name=None, x_value=0, x_pourcent_height=0., x_pourcent_width=0.,
                  y_value=0, y_pourcent_height=0.,
                  y_pourcent_width=0., margins=(0, 0, 0, 0)):
+        self.id: int | None = _id
+
         self.base: PosBase | None = base
         assert isinstance(self.base, PosBase | None)
 
@@ -181,3 +183,13 @@ class Pos:
                 type(self.margins) == list and len(self.margins) == 4 and all(
                     [type(marge) == int for marge in self.margins]) and
                 (type(self.base) == PosBase or self.base is None) and isinstance(self.windows_name, str | None))
+
+    def update(self, database_manager: "DataManager"):
+        if not self.id:
+            return None
+        database_manager.Position.update(
+            self.id, self.base, self.windows_name,
+            self.x_pourcent_width, self.x_pourcent_width, self.x_value,
+            self.y_pourcent_width, self.y_pourcent_height, self.y_value,
+            self.margins[0], self.margins[1], self.margins[2], self.margins[3])
+        return True

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QChec
 
 from Types.GuiObjects.QCustomObjects import EventItem, QNowEvent
 from Types.GuiObjects.QObjects import QScrollCategorie, QScroll
-from Types.Listerners.Event import ListEvent, Event, Pos, EventClick
+from Types.Listerners.Event import ListEvent, Event
 from Types.Listerners.Listener import Listener
 from Types.Listerners.Pos import PosBase
 from Types.Listerners.Simulator import Simulator
@@ -112,7 +112,7 @@ class MainWindows(QMainWindow):
         self.is_relative.setGeometry(10, 185, 100, 30)
 
         self.base = QComboBox(self)
-        self.base.addItems(PosBase.__members__.keys())
+        self.base.addItems(list(PosBase.__members__.keys()))
         self.base.setGeometry(10, 220, 100, 30)
 
         monitors_names = self.get_monitors()
@@ -169,7 +169,7 @@ class MainWindows(QMainWindow):
     # Manage Categories
     def add_categ(self):
         name = self.add_categ_edit.text()
-        categ_id = database_manager.addCategorie(name)[0]
+        categ_id = database_manager.Categorie.add(name)[0]
 
         self.add_categ_edit.clear()
         self.loadMacroScrollArea()
@@ -177,7 +177,7 @@ class MainWindows(QMainWindow):
 
     def deleteCateg(self):
         categ_id = self.macros_scroll_area.categSlc
-        database_manager.deleteCategories(categ_id)
+        database_manager.Categorie.delete(categ_id)
         self.macros_scroll_area.removeCateg(categ_id)
 
     # Manage Macros
@@ -185,13 +185,13 @@ class MainWindows(QMainWindow):
         name = self.add_seq_edit.text()
         if self.macros_scroll_area.categSlc is None:
             return
-        macro_id = database_manager.addMacro(name, self.macros_scroll_area.categSlc)[0]
+        macro_id = database_manager.Macro.add(name, self.macros_scroll_area.categSlc)[0]
 
-        self.addMacroSrollAreaItem((macro_id, name))
+        self.addMacroScrollAreaItem((macro_id, name))
         self.add_seq_edit.clear()
 
     def deleteMacro(self, macro):
-        database_manager.deleteMacro(macro)
+        database_manager.Macro.delete(macro)
         self.macros_scroll_area.remove(macro)
 
     @qasync.asyncSlot()
@@ -205,7 +205,7 @@ class MainWindows(QMainWindow):
         self.name_save.hide()
         self.cancel_save.hide()
         macro_id = self.ls.save(text, self.macros_scroll_area.categSlc, database_manager)
-        self.addMacroSrollAreaItem((macro_id, text))
+        self.addMacroScrollAreaItem((macro_id, text))
 
     @qasync.asyncSlot()
     async def cancelMacro(self):
@@ -237,21 +237,12 @@ class MainWindows(QMainWindow):
                 scroll_value + (value - self.event_scroll_area.height()))
 
     def saveEditedEvent(self, qevent: EventItem):
-        _, time, data = qevent.config_item.event.jsonify()
-        if qevent.config_item.event.type == "click":
-            base, windows_name, x_pourcent_width, x_pourcent_height, x_value, y_pourcent_width, y_pourcent_height, y_value, margins = qevent.config_item.event.pos.jsonify()
-            database_manager.updatePosition(
-                qevent.config_item.event.id,
-                {"x_value": x_value, "y_value": y_value,
-                 "x_pourcent_width": x_pourcent_width, "y_pourcent_width": y_pourcent_width,
-                 "x_pourcent_height": x_pourcent_height, "y_pourcent_height": y_pourcent_height, "margins": margins
-                 })
-        database_manager.updateEvent(qevent.config_item.event.id, {"time": time, "data": data})
+        qevent.config_item.event.update(database_manager)
         self.setMacro(self.macro)
         self.macro_edited = None
 
     def deleteEvent(self, _id):
-        database_manager.deleteEvent(_id)
+        database_manager.Event.delete(_id)
         self.event_scroll_area.remove(_id)
         self.macro_edited = None
 
@@ -265,11 +256,8 @@ class MainWindows(QMainWindow):
             await self.adjusteScrollEditEvent(index, item.height())
 
     def saveEvent(self, _id, macro_id, event: Event):
-        e_type, e_time, data = event.jsonify()
-        position: Pos = event.pos if isinstance(event, EventClick) else None
-        event_id = database_manager.insertEvent(_id, e_type, e_time, data, macro_id)[0]
-        if position:
-            database_manager.addPosition(*position.jsonify(), event_id)
+        position = database_manager.Position.getInsertPosition(_id, macro_id)
+        event.save(database_manager, macro_id, position)
         self.setMacro(self.macro)
 
     def cancelAddEvent(self):
@@ -295,7 +283,7 @@ class MainWindows(QMainWindow):
 
     # Load Scroll AREA
     def loadMacroScrollArea(self):
-        categories = database_manager.getCategories()[1]
+        categories = database_manager.Categorie.getAlls()[1]
 
         for categ in categories:
             categ_id, categ_name = categ
@@ -303,13 +291,13 @@ class MainWindows(QMainWindow):
             self.macros_scroll_area.setCurrentCateg(categ_id)
             self.macros_scroll_area.clear()
 
-            for macro in database_manager.getMacroOfCategorie(categ_id)[1]:
-                self.addMacroSrollAreaItem((macro[0], macro[1]))
+            for macro in database_manager.Macro.getMacroOfCategorie(categ_id)[1]:
+                self.addMacroScrollAreaItem((macro[0], macro[1]))
 
         if categories:
             self.macros_scroll_area.setCurrentCateg(categories[0][0])
 
-    def addMacroSrollAreaItem(self, macro: tuple):
+    def addMacroScrollAreaItem(self, macro: tuple):
         item = QFrame(self.macros_scroll_area)
         item.setFixedHeight(25)
         button = QPushButton(macro[1], item)
@@ -326,7 +314,7 @@ class MainWindows(QMainWindow):
         self.event_scroll_area.clear()
         self.loadEventScrollArea_uuid = secrets.token_hex()
         uuid = self.loadEventScrollArea_uuid
-        events: list[Event] = ListEvent(database_manager.getEventOfMacro(self.macro)[1])
+        events: list[Event] = ListEvent(database_manager.Event.getEventOfMacro(self.macro)[1])
         button = QPushButton("➕")
         button.setFixedHeight(30)
         button.clicked.connect(lambda _: self.addEvent(0, None, self.macro))
