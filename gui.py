@@ -4,8 +4,9 @@ import secrets
 
 import qasync
 from PySide6.QtCore import Signal, QRect
-from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QCheckBox, QComboBox
+from PySide6.QtGui import QCloseEvent, Qt
+from PySide6.QtWidgets import QMainWindow, QPushButton, QLineEdit, QFrame, QCheckBox, QComboBox, QHBoxLayout, \
+    QVBoxLayout, QWidget
 
 from Types.GuiObjects.QCustomObjects import EventItem, QNowEvent
 from Types.GuiObjects.QObjects import QScrollCategorie, QScroll
@@ -27,8 +28,6 @@ class MainWindows(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("AutoFarm")
-        self.setGeometry(100, 100, 1100, 750)
-        self.setFixedSize(1100, 750)
 
         # Config
         self.pos_params = PosParams(False, PosBase.SCREEN, base_name=None, margins=(0, 0, 0, 0))
@@ -51,93 +50,122 @@ class MainWindows(QMainWindow):
         self._launch_anim_signal.connect(lambda macro_id, index: self.setMacro(macro_id, max(0, (index or 0) - 10)) if self.macro != macro_id else None)
         self._event_scroll_area_isload.connect(lambda: None)
 
+        # Affichage
+        self.widget = QWidget()
+        self.setCentralWidget(self.widget)
+        self.main_layout = QHBoxLayout(self.widget)
+
+        self.left_layout = QVBoxLayout()
+        self.middle_layout = QVBoxLayout()
+        self.right_layout = QVBoxLayout()
+
+        self.main_layout.addLayout(self.left_layout, 0)
+        self.main_layout.addLayout(self.middle_layout, 1)
+        self.main_layout.addLayout(self.right_layout, 2)
+
         ## Left Zone
         # Ligne 1
         self.launch_button = QPushButton("lancer la macro", self)
         self.launch_button.clicked.connect(self.launchMacro)
-        self.launch_button.setGeometry(10, 10, 300, 30)
+        self.left_layout.addWidget(self.launch_button)
 
         # Ligne 2
         self.button = QPushButton("Enregistrer", self)
         self.button.clicked.connect(self.recordNewMacro)
-        self.button.setGeometry(10, 45, 300, 30)
+        self.left_layout.addWidget(self.button)
 
         # Ligne 2 col 1
+        self.save_widget_layout = QHBoxLayout()
+        self.left_layout.addLayout(self.save_widget_layout)
+
         self.save_button = QPushButton("Sauvegarder", self)
         self.save_button.clicked.connect(self.saveMacro)
-        self.save_button.setGeometry(10, 45, 100, 30)
         self.save_button.hide()
+        self.save_widget_layout.addWidget(self.save_button)
 
         # Ligne 2 col 2
         self.name_save = QLineEdit(self)
-        self.name_save.setGeometry(110, 45, 100, 30)
         self.name_save.hide()
+        self.save_widget_layout.addWidget(self.name_save)
 
         # Ligne 2 col 3
         self.cancel_save = QPushButton("Annuler", self)
-        self.cancel_save.setGeometry(210, 45, 100, 30)
         self.cancel_save.setStyleSheet("background: rgb(200, 0, 0); border: 1px solid white; border-radius: 8px")
         self.cancel_save.clicked.connect(self.cancelMacro)
         self.cancel_save.hide()
+        self.save_widget_layout.addWidget(self.cancel_save)
 
         # Ligne 3 col 1
+        self.categ_widgets_layout = QHBoxLayout()
+        self.left_layout.addLayout(self.categ_widgets_layout)
+
         self.add_categ_edit = QLineEdit(self)
-        self.add_categ_edit.setGeometry(10, 80, 100, 30)
+        self.categ_widgets_layout.addWidget(self.add_categ_edit)
 
         # Ligne 3 col 2
         self.add_categ_btn = QPushButton("ajouter categ", self)
-        self.add_categ_btn.setGeometry(110, 80, 100, 30)
         self.add_categ_btn.clicked.connect(self.add_categ)
+        self.categ_widgets_layout.addWidget(self.add_categ_btn)
 
         # Ligne 3 col 3
         self.delete_categ_btn = QPushButton("Retirer categ", self)
-        self.delete_categ_btn.setGeometry(210, 80, 100, 30)
         self.delete_categ_btn.clicked.connect(self.deleteCateg)
+        self.categ_widgets_layout.addWidget(self.delete_categ_btn)
 
         # Ligne 4 col 1
+        self.macro_widgets_layout = QHBoxLayout()
+        self.left_layout.addLayout(self.macro_widgets_layout)
+
         self.add_seq_edit = QLineEdit(self)
-        self.add_seq_edit.setGeometry(10, 115, 100, 30)
+        self.macro_widgets_layout.addWidget(self.add_seq_edit)
 
         # Ligne 4 col 2
         self.add_seq_btn = QPushButton("Ajout macro", self)
         self.add_seq_btn.clicked.connect(self.addNewBlankMacro)
-        self.add_seq_btn.setGeometry(110, 115, 100, 30)
+        self.macro_widgets_layout.addWidget(self.add_seq_btn)
 
         self.separator_1 = QFrame(self)
-        self.separator_1.setGeometry(10, 165, 300, 1)
+        self.separator_1.setFixedHeight(2)
         self.separator_1.setStyleSheet("border-top: 2px solid white")
+        self.left_layout.addWidget(self.separator_1)
 
         # PosParams
         self.is_relative = QCheckBox("Relatif", self)
-        self.is_relative.setGeometry(10, 185, 100, 30)
+        self.left_layout.addWidget(self.is_relative)
 
         self.base = QComboBox(self)
         self.base.addItems(list(PosBase.__members__.keys()))
-        self.base.setGeometry(10, 220, 100, 30)
 
         monitors_names = self.get_monitors()
 
         self.base_name = QComboBox(self)
         self.base_name.addItems(monitors_names)
-        self.base_name.setGeometry(110, 220, 200, 30)
         self.pos_params.base_name = self.base_name.currentText()
 
         self.is_relative.checkStateChanged.connect(self.setPosParamsIsRelative)
         self.base_name.currentTextChanged.connect(self.setPosParamsBaseName)
         self.base.currentTextChanged.connect(self.setPosParamsBase)
 
+        self.params_layout = QHBoxLayout()
+        self.left_layout.addLayout(self.params_layout)
+
+        self.params_layout.addWidget(self.base)
+        self.params_layout.addWidget(self.base_name)
+
+        self.left_layout.addStretch(1)
         ## Middle Zone
         self.macros_scroll_area = QScrollCategorie(self)
-        self.macros_scroll_area.setGeometry(325, 10, 275, 700)
         self.loadMacroScrollArea()
+        self.macros_scroll_area.setMinimumWidth(250)
+        self.middle_layout.addWidget(self.macros_scroll_area, 1)
 
         # Right Zone
-        self.base_geo = QRect(600, 10, 500, 700)
         self.event_scroll_area = QScroll(self)
-        self.event_scroll_area.setGeometry(self.base_geo)
+        self.event_scroll_area.setMinimumWidth(250)
 
         self.pre_load__event_scroll_area = QScroll(self)
         self.pre_load__event_scroll_area.hide()
+        self.right_layout.addWidget(self.event_scroll_area, 30)
 
     # Arrête correctement les prévisualisations en cours
     def closeEvent(self, event: QCloseEvent):
@@ -330,7 +358,7 @@ class MainWindows(QMainWindow):
             if self.loadEventScrollArea_uuid != uuid:
                 return
             self.event_scroll_area.add(item, i.id)
-            await asyncio.sleep(0.00)
+            await asyncio.sleep(0.001)
             self._event_scroll_area_isload.emit(datetime.datetime.now().timestamp())
 
 

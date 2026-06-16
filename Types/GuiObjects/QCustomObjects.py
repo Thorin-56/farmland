@@ -9,14 +9,15 @@ from Types.GuiObjects.QObjects import QScroll
 from Types.Listerners.Event import Event, EventKey, EventClick, EventKeyRelease, EventLaunch, Pos, EventWrite, EventMove
 from VARS import database_manager
 
+# hue -> teinte HSL; theme -> 0: Light | 1: Dark;
 TABLE = {
-    "click": lambda x, y: f"({y}, {x}, {x})",
-    "key release": lambda x, y: f"({x}, {y}, {x})",
-    "key": lambda x, y: f"({x}, {x}, {y})",
-    "write": lambda x, y: f"({y}, {y}, {x})",
-    "launch": lambda x, y: f"({y}, {x}, {y})",
-    "edit": lambda x, y: f"({y}, {y}, {y})",
-    "move": lambda x, y: f"({x}, {y}, {y})",
+    "click": {"hue": 0, "theme": 1},
+    "write": {"hue": 60, "theme": 0},
+    "key release": {"hue": 120, "theme": 1},
+    "move": {"hue": 180, "theme": 0},
+    "key": {"hue": 240, "theme": 1},
+    "launch": {"hue": 300, "theme": 1},
+    "edit": {"hue": 0, "theme": 1},
 }
 
 T = TypeVar("T", bound=Event)
@@ -90,8 +91,8 @@ class ConfigItem(Generic[T], metaclass=Meta):
             return None
         frame = QFrame()
         frame.setFixedHeight(30)
-        frame.setStyleSheet(f"*{{background: rgb{TABLE[self.event.type](0, 150)}; border-radius: 5px}}"
-                            f"QSpinBox, QDoubleSpinBox{{ background: rgb{TABLE[self.event.type](0, 125)}; padding: 0px; margin: 0px;}}")
+        frame.setStyleSheet(f"*{{background: hsl({TABLE[self.event.type]["hue"]}, 100%, 50%); border-radius: 5px;}}"
+                            f"QSpinBox, QDoubleSpinBox{{ background: hsl({TABLE[self.event.type]["hue"]}, 100%, 65%); padding: 0px; margin: 0px;}}")
 
         layout = QHBoxLayout()
         layout.setContentsMargins(5, 0, 0, 0)
@@ -118,8 +119,8 @@ class ConfigItem(Generic[T], metaclass=Meta):
         button = QPushButton(text)
         button.setFixedHeight(30)
         button.setStyleSheet(f"""
-                                QPushButton{{ background: rgb{TABLE[self.event.type](0, 170)}; border-radius: 5px }} 
-                                QPushButton:hover{{ background: rgb{TABLE[self.event.type](0, 100)}; }}
+                                QPushButton{{ background: hsl({TABLE[self.event.type]["hue"]}, 100%, 40%); border-radius: 5px }} 
+                                QPushButton:hover{{ background: hsl({TABLE[self.event.type]["hue"]}, 100%, 30%); }}
                             """)
         self.items.update({name: button})
         return button
@@ -149,6 +150,7 @@ class ConfigClickItem(ConfigItem[EventClick]):
         # Margins
         self.addTitle("Marges", 'margins title')
         frame_margins = self.addFrame("margins")
+        frame_margins.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.margin_left = CompactSpinBox(prefix="gauche: ", minimum=0, maximum=9999, singleStep=1)
         self.margin_right = CompactSpinBox(prefix="droite: ", minimum=0, maximum=9999, singleStep=1)
         self.margin_top = CompactSpinBox(prefix="haut: ", minimum=0, maximum=9999, singleStep=1)
@@ -171,11 +173,13 @@ class ConfigClickItem(ConfigItem[EventClick]):
         # Position
         self.addTitle("Position", "position title")
         frame_pos_x = self.addFrame("position x")
+        frame_pos_x.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_pos_x = QLabel("X: ")
         self.edit_pos_x_width = CompactDoubleSpinBox(prefix="largeur: ", suffix="%", minimum=-100, maximum=100, singleStep=0.01)
         self.edit_pos_x_height = CompactDoubleSpinBox(prefix="hauteur: ", suffix="%", minimum=-100, maximum=100, singleStep=0.01)
         self.edit_pos_x_value = CompactSpinBox(prefix="ajout: ", suffix="px", minimum=-9999, maximum=9999, singleStep=1)
         frame_pos_y = self.addFrame("position y")
+        frame_pos_y.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_pos_y = QLabel("Y: ")
         self.edit_pos_y_width = CompactDoubleSpinBox(prefix="largeur: ", suffix="%", minimum=-100, maximum=100, singleStep=0.01)
         self.edit_pos_y_height= CompactDoubleSpinBox(prefix="hauteur: ", suffix="%", minimum=-100, maximum=100, singleStep=0.01)
@@ -572,7 +576,7 @@ class ConfigLaunchItem(ConfigItem[EventLaunch]):
         frame_categorie = self.addFrame("categorie")
         self.label_categorie = QLabel("Catégorie: ")
         self.edit_categorie = QComboBox()
-        self.edit_categorie.setStyleSheet(f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px; padding: 0 0 0 5px")
+        self.edit_categorie.setStyleSheet(f"background: hsl({TABLE[self.event.type]["hue"]}, 100%, 50%); border-radius: 5px; padding: 0 0 0 5px")
         categories = database_manager.Categorie.getAlls()[1]
         self.edit_categorie.addItems([f"[{categorie[0]}] {categorie[1]}" for categorie in categories])
 
@@ -585,7 +589,7 @@ class ConfigLaunchItem(ConfigItem[EventLaunch]):
 
         self.edit_name = QComboBox()
         self.edit_name.setStyleSheet(
-            f"background: rgb{TABLE["launch"](50, 200)}; border-radius: 5px; padding: 0 0 0 5px")
+            f"background: hsl({TABLE[self.event.type]["hue"]}, 100% 50%); border-radius: 5px; padding: 0 0 0 5px")
         self.edit_name.addItems(
             [f"[{macro[0]}] {macro[1]}" for macro in database_manager.Macro.getMacroOfCategorie(categories[0][0])[1]])
 
@@ -639,12 +643,13 @@ class EventItem(QWidget, Generic[T]):
         self.hbox = QHBoxLayout()
         self.hbox.setContentsMargins(0, 0, 0, 0)
 
-        self.main_frame = QFrame(self)
         self.anim = None
-        self.main_frame.setStyleSheet(f"*{{background: rgb{TABLE[event.type](20, 200)}; border-radius: 5px }}")
+        self.main_frame = QFrame(self)
+        self.main_frame.setStyleSheet(f"*{{background: hsl({TABLE[event.type]["hue"]}, 100%, 50%); color: {("black", "white")[TABLE[event.type]["theme"]]}; border-radius: 5px }}")
+        self.main_frame.setMinimumWidth(400)
 
         self.frame_btn = QFrame(self)
-        self.frame_btn.setMaximumWidth(90)
+        self.frame_btn.setFixedWidth(90)
         self.frame_btn.setStyleSheet("QFrame { background: rgb(50, 50, 50); border-radius: 5px }")
 
         self.main_frame_vbox = QVBoxLayout()
@@ -729,9 +734,9 @@ class EventItem(QWidget, Generic[T]):
         self.anim.setEndValue(1.)
         self.anim.setDuration((self.event_value.time-delay)*1000)
         self.anim.valueChanged.connect(lambda color: self.main_frame.setStyleSheet(
-            f"*{{background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:{color} rgb{TABLE[self.event_value.type](200, 200)}, stop:{color + 0.01} rgb{TABLE[self.event_value.type](20, 200)}); border-radius: 5px }}"))
+            f"*{{background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:{color} hsl({TABLE[self.event_value.type]["hue"]}, 100%, 50%), stop:{color + 0.01} hsl({TABLE[self.event_value.type]["hue"]}, 100%, 50%)); border-radius: 5px }}"))
         # self.anim.valueChanged.connect(lambda x: print(x))
-        self.anim.finished.connect(lambda: self.main_frame.setStyleSheet(f"*{{background: rgb{TABLE[self.event_value.type](20, 200)}; border-radius: 5px }}"))
+        self.anim.finished.connect(lambda: self.main_frame.setStyleSheet(f"*{{background: hsl({TABLE[self.event_value.type]["hue"]}, 100%, 50%); border-radius: 5px }}"))
         self.anim.start()
 
 class EventClickItem(EventItem[EventClick]):
@@ -754,7 +759,7 @@ class QNowEvent(QFrame):
     save_btn: QPushButton
     def __init__(self):
         super().__init__()
-        self.setStyleSheet(f"background: rgb{TABLE["edit"](0, 150)}; border-radius: 5px")
+        self.setStyleSheet(f"background: hsl(0, 0%, 75%); border-radius: 5px")
 
         self.current_event = EventLaunch("", 0.0)
 
@@ -766,7 +771,7 @@ class QNowEvent(QFrame):
 
         self.frame_type = QFrame()
         self.frame_type.setFixedHeight(30)
-        self.frame_type.setStyleSheet(f"background: rgb{TABLE["edit"](0, 125)}; border-radius: 5px")
+        self.frame_type.setStyleSheet(f"background: hsl(0, 0%, 50%); border-radius: 5px")
 
         self.label_type = QLabel("Type: ", self.frame_type)
         self.label_type.setGeometry(5, 0, 100, 30)
@@ -799,7 +804,7 @@ class QNowEvent(QFrame):
 
     def setType(self, _type):
         self.arg_vbox.clear()
-        self.setStyleSheet(f"background: rgb{TABLE[_type](25, 75)}; border-radius: 5px")
+        self.setStyleSheet(f"background: hsl({TABLE[_type]["hue"]}, 50%%, 50%); border-radius: 5px")
 
         match _type:
             case "launch":

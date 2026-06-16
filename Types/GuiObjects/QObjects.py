@@ -83,17 +83,26 @@ class QHorizontalScroll(QScroll):
 class QScrollCategorie(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        self.headers = QHorizontalScroll(self)
         self.headers_height = 30
+        self.headers = QHorizontalScroll(self)
         self.headers.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.headers.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.headers.vbox.setContentsMargins(0, 0, 0, 0)
         self.headers.vbox.setDirection(QVBoxLayout.Direction.LeftToRight)
         self.headers.vbox.setSpacing(0)
-        self.headers.setGeometry(0, 0, self.width(), self.headers_height)
+        self.headers.setFixedHeight(self.headers_height)
+
+        layout.addWidget(self.headers)
 
         self.scroll: QScroll | None = None
+        self.scroll_container = QWidget()  # va contenir le scroll actif
+        self.scroll_layout = QVBoxLayout(self.scroll_container)
+        self.scroll_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.scroll_container)
 
         self.categ: dict[str, dict[str, QWidget]] = {}
         self.categ_h: dict[str, dict[str, QWidget]] = {}
@@ -103,14 +112,14 @@ class QScrollCategorie(QWidget):
         if self.categSlc:
             self.categ_h[self.categSlc]["button"].setStyleSheet("color: white")
             self.scroll.hide()
+            self.scroll_layout.removeWidget(self.scroll)
 
         self.categSlc = _id
         if self.categSlc is None:
             return
         self.scroll = self.categ[_id]["scroll"]
-        self.scroll.setGeometry(0, self.headers_height, self.width(), self.height() - self.headers_height)
+        self.scroll_layout.addWidget(self.scroll)
         self.scroll.show()
-
         self.categ_h[_id]["button"].setStyleSheet("color: red")
 
     def addCateg(self, _id, name):
@@ -153,14 +162,7 @@ class QScrollCategorie(QWidget):
 
     def clear(self):
         self.scroll.clear()
-    
-    def setGeometry(self, *args):
-        x, y, w, h = args
-        super().setGeometry(x, y, w, h)
-        
-        self.headers.setGeometry(0, 0, self.width(), self.headers_height)
-        if self.scroll:
-            self.scroll.setGeometry(0, self.headers_height, self.width(), self.height() - self.headers_height)
+
 
 class QABCMeta(type(QObject), ABCMeta):
     pass

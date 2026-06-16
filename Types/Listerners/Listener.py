@@ -1,7 +1,9 @@
+import datetime
+
 from pynput.mouse import Controller as ConM, Button, Listener as SListM
 from pynput.keyboard import Listener as ListK, Key, KeyCode
 from Types.DataManager.DataManager import DataManager
-from Types.Listerners.Event import EventClick, EventKey, EventKeyRelease, ListEvent, Pos
+from Types.Listerners.Event import EventClick, EventKey, EventKeyRelease, ListEvent, Pos, EventMove
 from Types.Listerners.Pos import PosBase
 from VARS import database_manager
 from Types.app_types import PosParams
@@ -50,10 +52,18 @@ class Listener:
         self.params = None
         self.mouse = None
         self.key = None
+        self.pos_mouse_pressed = None
+        self.time_mouse_pressed = None
 
     def on_click(self, pos: Pos, button: Button, pressed: bool):
         if pressed:
-            self.events.append(EventClick(button, pos, None))
+            self.time_mouse_pressed = datetime.datetime.now().timestamp()
+            self.pos_mouse_pressed = pos
+        else:
+            if self. pos_mouse_pressed == pos:
+                self.events.append(EventClick(button, pos, None))
+            else:
+                self.events.append(EventMove(button, round(datetime.datetime.now().timestamp() - self.time_mouse_pressed, 2), self.pos_mouse_pressed, pos, None))
 
     @staticmethod
     def on_move(x, y):

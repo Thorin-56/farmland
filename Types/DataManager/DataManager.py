@@ -56,7 +56,7 @@ class DataManager:
                                 categorie integer not null
                                     constraint macros_categories_id_fk
                                         references categories
-                                        on update cascade on delete restrict
+                                        on update cascade on delete cascade 
                             );
                          """)
         self.__execute__("""create table IF NOT EXISTS base_event
