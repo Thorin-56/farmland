@@ -13,4 +13,4 @@ class DatabaseKeyRelease:
 
     def update(self, event_id, time, key, order):
         self.parent.__execute__(f"UPDATE base_event SET time = ?, position = ? WHERE id = ?", (time, order, event_id))
-        self.parent.__execute__(f"UPDATE event_key_release SET button = ? WHERE event_id = ?", (key, event_id))
+        self.parent.__execute__(f"UPDATE event_key_release SET key = ? WHERE event_id = ?", (key, event_id))

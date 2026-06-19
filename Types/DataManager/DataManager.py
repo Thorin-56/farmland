@@ -1,6 +1,6 @@
 import sqlite3
 from Types.DataManager import Position, Categorie, Macro
-from Types.DataManager.Events import Event, Click, KeyPressed, KeyRelease, Launch, Write, Move
+from Types.DataManager.Events import Event, Click, KeyPressed, KeyRelease, Launch, Write, Move, Scroll
 
 class DataManager:
     def __init__(self):
@@ -15,6 +15,7 @@ class DataManager:
         self.Launch = Launch(self)
         self.Move = Move(self)
         self.Write = Write(self)
+        self.Scroll = Scroll(self)
 
         self.Position = Position(self)
         self.Event = Event(self)
@@ -56,7 +57,7 @@ class DataManager:
                                 categorie integer not null
                                     constraint macros_categories_id_fk
                                         references categories
-                                        on update cascade on delete cascade 
+                                        on update cascade on delete restrict 
                             );
                          """)
         self.__execute__("""create table IF NOT EXISTS base_event
@@ -69,7 +70,7 @@ class DataManager:
                                 macro_id integer not null
                                     constraint base_event_macros_id_fk
                                         references macros
-                                        on delete restrict,
+                                        on delete cascade ,
                                 position integer not null
                             );
                          """)
@@ -146,6 +147,22 @@ class DataManager:
                                         references base_event
                                         on delete cascade,
                                 text     TEXT    not null
+                            );
+                         """)
+        self.__execute__("""create table IF NOT EXISTS event_scroll
+                            (
+                                event_id integer not null
+                                    constraint event_click_pk
+                                        primary key
+                                    constraint event_click_base_event_id_fk
+                                        references base_event
+                                        on delete cascade,
+                                position integer not null
+                                    constraint event_click_positions_id_fk
+                                        references positions
+                                        on delete cascade,
+                                dx   INTEGER not null default 0,
+                                dy   INTEGER not null default 0
                             );
                          """)
         self.__execute__("""create table IF NOT EXISTS positions_new

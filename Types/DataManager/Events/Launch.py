@@ -13,4 +13,4 @@ class DatabaseLaunch:
 
     def update(self, event_id, time, macro, order):
         self.parent.__execute__(f"UPDATE base_event SET time = ?, position = ? WHERE id = ?", (time, order, event_id))
-        self.parent.__execute__(f"UPDATE event_launch SET button = ? WHERE event_id = ?", (macro, event_id))
+        self.parent.__execute__(f"UPDATE event_launch SET macro = ? WHERE event_id = ?", (macro, event_id))

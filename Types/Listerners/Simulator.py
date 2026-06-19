@@ -6,7 +6,7 @@ from pynput.mouse import Controller as ConM
 
 from Types.DataManager.DataManager import DataManager
 from Types.Listerners.Event import ListEvent, EventKey, EventKeyRelease, EventClick, EventSleep, EventLaunch, \
-    EventWrite, EventMove
+    EventWrite, EventMove, EventScroll
 from VARS import TABLE_KEY
 
 
@@ -106,13 +106,34 @@ class Simulator:
                     step_numbers = int(max(event.duration, 0.1) // 0.01)
                     vecteur = pos_dst[0] - pos_src[0], pos_dst[1] - pos_src[1]
                     step_vecteur = vecteur[0] / step_numbers, vecteur[1] / step_numbers
-                    print(step_vecteur, vecteur, step_numbers)
                     for i in range(step_numbers):
                         self.ConM.position = pos_src[0] + step_vecteur[0] * i, pos_src[1] + step_vecteur[1] * i
                         time.sleep(0.01)
                     self.ConM.position = pos_dst
                     time.sleep(0.01)
                     self.ConM.release(event.btn)
+                case "scroll":
+                    assert isinstance(event, EventScroll)
+                    base_rect = event.pos.base_rect()
+                    if not base_rect:
+                        return
+                    x, y, width, height = base_rect
+
+                    pos = event.pos.calcul(x, y, width, height)
+
+                    sign_dx = (event.dx > 0) - (event.dx < 0)
+                    sign_dy = (event.dy > 0) - (event.dy < 0)
+
+                    dx_list = [sign_dx] * abs(event.dx)
+                    dy_list = [sign_dy] * abs(event.dy)
+
+                    from itertools import zip_longest
+
+                    self.ConM.position = pos
+                    for x, y in zip_longest(dx_list, dy_list, fillvalue=0):
+                        time.sleep(0.01)
+                        self.ConM.scroll(x, y)
+
     def stop(self):
         self._stop.set()
         if self.ls:
